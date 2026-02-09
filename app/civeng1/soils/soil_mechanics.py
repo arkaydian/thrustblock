@@ -10,7 +10,7 @@ from .soil_enum import *
 UNIT_WEIGHT_WATER = 10  # kN/m³
 
 COARSE_SOILS = (SoilType.GRAVEL, SoilType.SAND)
-FINE_SOILS = (SoilType.SILT, SoilType.CLAY)
+FINE_SOILS = (SoilType.CLAY)
 
 ReportRow = Tuple[str, str]
 EngRes = dict[str, Union[float, str]]
@@ -47,27 +47,27 @@ def get_water_condition(condition: str) -> WaterCondition:
             return water_condition
     raise ValueError(f"No WaterCondition found for label: {condition}")
 
-def classify_soil(soil_type: SoilType, soil_consistency: SoilConsistency) -> SoilDesignClass:
-    """Classifies soil as Class 1, 2, or 3 based on type and SoilConsistency."""
-    if soil_type.category == SoilCategory.COARSE:
-        if soil_consistency == SoilConsistency.VERY_LOOSE:
-            return SoilDesignClass.CLASS_3
-        elif soil_consistency == SoilConsistency.LOOSE:
-            return SoilDesignClass.CLASS_2
-        elif soil_consistency in (SoilConsistency.MEDIUM_DENSE, SoilConsistency.DENSE, SoilConsistency.VERY_DENSE, SoilConsistency.CEMENTED):
-            return SoilDesignClass.CLASS_1
-        else:
-            raise ValueError(f"Unrecognized coarse soil_consistency: {soil_consistency.label}")
-    elif soil_type.category == SoilCategory.FINE:
-        if soil_consistency == SoilConsistency.VERY_SOFT:
-            return SoilDesignClass.CLASS_3
-        elif soil_consistency in (SoilConsistency.SOFT, SoilConsistency.NONE):
-            return SoilDesignClass.CLASS_2
-        elif soil_consistency in (SoilConsistency.FIRM, SoilConsistency.STIFF, SoilConsistency.VERY_STIFF):
-            return SoilDesignClass.CLASS_1
-        else:
-            raise ValueError(f"Unrecognized fine soil_consistency: {soil_consistency.label}")
-    raise ValueError(f"Unknown soil category: {soil_type.category}")
+# def classify_soil(soil_type: SoilType, soil_consistency: SoilConsistency) -> SoilDesignClass:
+#     """Classifies soil as Class 1, 2, or 3 based on type and SoilConsistency."""
+#     if soil_type.category == SoilCategory.COARSE:
+#         if soil_consistency == SoilConsistency.VERY_LOOSE:
+#             return SoilDesignClass.CLASS_3
+#         elif soil_consistency == SoilConsistency.LOOSE:
+#             return SoilDesignClass.CLASS_2
+#         elif soil_consistency in (SoilConsistency.MEDIUM_DENSE, SoilConsistency.DENSE, SoilConsistency.VERY_DENSE, SoilConsistency.CEMENTED):
+#             return SoilDesignClass.CLASS_1
+#         else:
+#             raise ValueError(f"Unrecognized coarse soil_consistency: {soil_consistency.label}")
+#     elif soil_type.category == SoilCategory.FINE:
+#         if soil_consistency == SoilConsistency.VERY_SOFT:
+#             return SoilDesignClass.CLASS_3
+#         elif soil_consistency in (SoilConsistency.SOFT, SoilConsistency.NONE):
+#             return SoilDesignClass.CLASS_2
+#         elif soil_consistency in (SoilConsistency.FIRM, SoilConsistency.STIFF, SoilConsistency.VERY_STIFF):
+#             return SoilDesignClass.CLASS_1
+#         else:
+#             raise ValueError(f"Unrecognized fine soil_consistency: {soil_consistency.label}")
+#     raise ValueError(f"Unknown soil category: {soil_type.category}")
 
 def interpolate_bearing_coefficients(value: float, coefficients_dict: dict = BEARING_CAPACITY_COEFFICIENTS) -> BearingCapacityCoefficients:
     # Sort the keys
@@ -118,9 +118,9 @@ class Soil(ABC):
                 f"water_condition={self.water_condition.name}"
             ) from e
 
-    @property
-    def design_class(self) -> SoilDesignClass:
-        return classify_soil(self.soil_type, self.soil_consistency)
+    # @property
+    # def design_class(self) -> SoilDesignClass:
+    #     return classify_soil(self.soil_type, self.soil_consistency)
     
     @property
     def soil_passive_resistance_factor(self) -> Tuple[float, ...]:
@@ -550,7 +550,7 @@ def build_coarse_soil(
         friction_angle=friction_angle,
     )
 
-@register_soil(SoilType.SILT, SoilType.CLAY)
+@register_soil(SoilType.CLAY)
 def build_fine_soil(
     *,
     soil_type: SoilType,

@@ -1,7 +1,13 @@
 import viktor as vkt
-from app.civeng.civeng.hydraulics import fittings
-from app.civeng.civeng.soils.soil_mechanics import FINE_SOILS, COARSE_SOILS, SoilType, SoilConsistency, SoilCategory, Soil, create_soil, get_soil_category, get_soil_type, get_soil_consistency, SOIL_PROPERTIES, WaterCondition
-from app.civeng.civeng.structures.concrete import create_thrust_block, ThrustBlock
+from app.civeng1.hydraulics import fittings
+from app.civeng1.soils.soil_mechanics import SoilType, SoilConsistency, SoilCategory, Soil, SOIL_PROPERTIES, WaterCondition
+from app.civeng1.structures.concrete import create_thrust_block, ThrustBlock
+import base64
+from pathlib import Path
+from io import BytesIO
+from openpyxl import load_workbook
+from openpyxl.styles import Font, Alignment
+from pathlib import Path
 
 #--- utils ---
 fitting_list = fittings.FITTING_LABELS
@@ -139,7 +145,8 @@ def min_active_soil_displacement_factor(params, **kwargs):
 
 pipe_outside_param = vkt.Or(
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Horizontal Bend"),
-    vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Vertical Bend"),
+    vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Vertical Downturn Bend"),
+    vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Vertical Upturn Bend"),
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Blank End"),
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Closed Valve"),
 )
@@ -158,7 +165,8 @@ pipe_diameter_branch = vkt.Or(
 )
 bend_angle = vkt.Or(
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Horizontal Bend"),
-    vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Vertical Bend"),
+    vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Vertical Downturn Bend"),
+    vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Vertical Upturn Bend"),
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Angle Branch")
 )
 
@@ -207,8 +215,8 @@ class Parametrization(vkt.Parametrization):
     soil_section.friction_angle = vkt.NumberField("Friction Angle", flex=25, visible=friction_angle, default=33, max=max_soil_params, min=min_soil_params)
     soil_section.undrained_shear_strength = vkt.NumberField("Undrained Shear Strength", flex=25, visible=undrained_shear_strength, default=50, max=max_soil_params, min=min_soil_params)
     soil_section.lb = vkt.LineBreak()
-    soil_section.user_soil_passive_factor = vkt.NumberField("Passive resistance displacement limitation factor", flex=15, default=3, max=max_passive_soil_displacement_factor, min=min_passive_soil_displacement_factor)
-    soil_section.user_soil_sliding_factor = vkt.NumberField("Sliding resistance displacement limitation factor", flex=15, default=2.25, max=max_active_soil_displacement_factor, min=min_active_soil_displacement_factor)
+    soil_section.soil_passive_factor = vkt.NumberField("Passive resistance displacement limitation factor", flex=15, default=3, max=max_passive_soil_displacement_factor, min=min_passive_soil_displacement_factor)
+    soil_section.soil_sliding_factor = vkt.NumberField("Sliding resistance displacement limitation factor", flex=15, default=2.25, max=max_active_soil_displacement_factor, min=min_active_soil_displacement_factor)
     # soil params 2
     soil_section.lb_2 = vkt.LineBreak()
     soil_section.ground_condition = vkt.OptionField("Select Ground Condition", flex=18, options=["Above Water", "Below Water"], default="Below Water") #type: ignore
@@ -216,256 +224,178 @@ class Parametrization(vkt.Parametrization):
     
     # thrust block geometry
     block_section = vkt.Section("Thrust Block Parameters", initially_expanded=True)
-    block_section.block_height = vkt.NumberField("Thrust Block Height", flex=18, default=1.8)
-    block_section.block_width = vkt.NumberField("Thrust Block Width", flex=18, default=3.5)
-    block_section.block_length = vkt.NumberField("Thrust Block Length", flex=18, default=2.5)
-    block_section.block_depth = vkt.NumberField("Thrust Block Depth", flex=18, default=2.3)
-    block_section.download_pdf = vkt.DownloadButton("Export to PDF (not ready)", method="generate_pdf")
+    block_section.height = vkt.NumberField("Thrust Block Height", flex=18, default=1.8)
+    block_section.width = vkt.NumberField("Thrust Block Width", flex=18, default=3.5)
+    block_section.length = vkt.NumberField("Thrust Block Length", flex=18, default=2.5)
+    block_section.depth = vkt.NumberField("Thrust Block Depth", flex=18, default=2.3)
+    block_section.lb = vkt.LineBreak()
+    block_section.download_pdf = vkt.DownloadButton("Export to Excel", method="export_to_excel", flex=24)
 
 class Controller(vkt.Controller):
-    parametrization = Parametrization(width=50)
+    parametrization = Parametrization(width=40)
 
-    def report_fitting_type_html(self, fitting_type: fittings.Fitting) -> str:
-        fitting_report = "".join(
-            f""" <div class="name">{key}</div>
-                <div class="result">{value}</div>
-            """ for key, value in fitting_type.report_dimensions()
-        )
-        return fitting_report
-        
-    def report_soil_type_html(self, soil_class: Soil):
-        soil_report = "".join(
-            f""" <div class="name">{key}</div>
-                <div class="result">{value}</div>
-            """ for key, value in soil_class.report_dimensions()
-        )
-        return soil_report
+    def render_workflow_html(self, params):
+        fitting_type = fittings.fitting_from_params(params=params)
+        dims=   f"""<div class="label">Pressure fixed by the designer </div>
+            <div class="result">P = <b>{params.fitting_section.maximum_design_pressure} kN/m2</b></div>
+            <div class="reference">Section 2.3</div>
+            <div class="label">Height</div>
+            <div class="result">H = {params.block_section.height} m</div>
+            <div class="reference"> - </div>
+            <div class="label">Width </div>
+            <div class="result">W = {params.block_section.width} m</div>
+            <div class="reference"> - </div>
+            <div class="label">Length </div>
+            <div class="result">L = {params.block_section.length} m</div>
+            <div class="reference"> - </div>
+            """
+        rows = []
+        for item in fitting_type.fitting_workflow_res:
+            row_html = f"""
+            <div class="label">{item['label']}</div>
+            <div class="result">{item['formula_html']}</div>
+            <div class ="reference">{(item['reference'])}</div>
+            """
+            rows.append(row_html)
+        return dims + "\n".join(rows)
     
-    def pass_through_checks(self, thrust_block: ThrustBlock):
-                pass_through_check = thrust_block.pass_through_resistance_check()
-                thrust_force_name = "Thrust Force (horizontal component)" if isinstance(thrust_block.fitting, fittings.VerticalBend) else "Thrust Force"
-                thrust_force_unit = f"T<sub>x</sub> = {pass_through_check[1]}"  if isinstance(thrust_block.fitting, fittings.VerticalBend) else f"T = {pass_through_check[1]}"
-                return f"""
-                <div class ="name"> Buoyancy coefficient </div>
-                <div class="result">C<sub>GW</sub> = {thrust_block.buoyancy_coefficient:.2f}</div>
-                <div class ="name"> Net passive soil pressure </div>
-                <div class="result">σ<sub>pa</sub> = {thrust_block.net_unit_area_soil_pressure:.2f} kN/m<sup>2</sup></div>
-                <div class ="name"> Base sliding resistance </div>
-                <div class="result"> 𝜏<sub>b</sub> = {thrust_block.sliding_resistance_base:.2f} kN/m<sup>2</sup></div>
-                <div class ="name"> Side sliding resistance </div>
-                <div class="result"> 𝜏<sub>s</sub> = {thrust_block.sliding_resistance_side:.2f} kN/m<sup>2</sup></div>
-                <div class ="name"> Passive face area </div>
-                <div class="result"> A<sub>f</sub> = H x W = {thrust_block.area_passive_face:.2f} m<sup>2</sup></div>
-                <div class ="name"> Base sliding area </div>
-                <div class="result"> A<sub>b</sub> = L x W = {thrust_block.area_base_sliding:.2f} m<sup>2</sup></div>
-                <div class ="name"> Sliding area per side </div>
-                <div class="result"> A<sub>s</sub> = H x L = {thrust_block.area_side_sliding:.2f} m<sup>2</sup></div>
-                <div class ="name"> Disturbed passive area due to pipe trench </div>
-                <div class="result"> A<sub>d</sub> = {thrust_block.area_disturbed_passive:.2f} m<sup>2</sup></div>
-                <div class ="name"> Block resistance force </div>
-                <div class="result"> R<sub>s</sub> = {thrust_block.soil_resistance:.2f} kN</div>
-                <div class="name"> {thrust_force_name}</div>
-                <div class="result"> {thrust_force_unit} kN</div>
-                <div class="name"><b>Horizontal Pass Through Check </b></div>
-                <div class="result"><b> {pass_through_check[0]} </b></div>
-                """
-    def overturning_checks(self, thrust_block: ThrustBlock):
-        if isinstance(thrust_block.fitting, fittings.VerticalBend) and thrust_block.fitting.turn_direction == "upturn":
-            return """"""
-        vertical_reaction_block = f"R<sub>v</sub> = (γ<sub>RC</sub> - (C<sub>GW</sub> x γ<sub>w</sub>)) x H x W x L = {thrust_block.vertical_reaction_block:.2f}" if isinstance(thrust_block.fitting ,fittings.VerticalBend) else \
-                f"R<sub>v</sub> = (γ<sub>s</sub> - (C<sub>GW</sub> x γ<sub>w</sub>)) x Z<sub>b</sub> x W x L = {thrust_block.vertical_reaction_block:.2f}"
-        net_vertical_reaction_of_block_key = f"Net vertical reaction of block" if isinstance(thrust_block.fitting ,fittings.VerticalBend) and thrust_block.fitting.turn_direction == "downturn" else ""
-        net_vertical_reaction_of_block = f"R<sub>v_net</sub> = R<sub>v_net</sub> - T<sub>z</sub> = {thrust_block.net_effective_weight_thrust_block:.2f} kN" if isinstance(thrust_block.fitting ,fittings.VerticalBend) and thrust_block.fitting.turn_direction == "downturn" else \
-                f""
-        return f"""
-                <div class="name"> Overturning moment lever arm </div>
-                <div class="result">{thrust_block.overturning_level_arm:.2f}</div>
-                <div class="name"> Overturning moment </div>
-                <div class="result">{thrust_block.over_turning_moment:.2f}</div>
-                <div class="name"> Passive face restoring moment </div>
-                <div class="result">{thrust_block.passive_face_restoring_moment:.2f}</div>
-                <div class="name"> Net disturbing moment </div>
-                <div class="result">{thrust_block.net_disturbing_moment:.2f}</div>
-                <div class="name"> Vertical reaction of block </div>
-                <div class="result">{vertical_reaction_block}</div>
-                <div class="name">{net_vertical_reaction_of_block_key}</div>
-                <div class="result">{net_vertical_reaction_of_block}</div>
-                <div class="name"> Concrete block restoring moment </div>
-                <div class="result">{thrust_block.block_restoring_moment:.2f}</div>
-                <div class="name"> Safety factor against overturning </div>
-                <div class="result">{thrust_block.safety_factor_against_overturning:.2f}</div>
-                <div class="name"><b> Overturning safety check </b></div>
-                <div class="result"><b>{thrust_block.overturning_stability_check()}</b></div>
-                """
-    def tb_workflow(self, thrust_block: ThrustBlock):
-        ...
+    def export_to_excel(self, params, **kwargs):
+        """Export the dimensions to an Excel file."""
+        # Create a new workbook and select the active sheet
+        template_path =  Path(__file__).parent / 'arcadis_calculation_sheet_template.xlsx'
+        wb = load_workbook(template_path)
+        ws = wb["Thrust Block 1"]
 
-    # Move below to soil_mechanics.py -> simplify the logic, it's too clunky right now
-    def create_soil_instance(self, params) -> Soil:
-        s = params.soil_section
-        if get_soil_type(params.soil_section.soil_type) in COARSE_SOILS:
-            return create_soil(
-            user_soil_type=s.soil_type,
-            user_soil_consistency=s.coarse_soil_consistency,
-            water_condition= get_water_condition(s.ground_condition),
-            ground_water_level=s.groundwater_level,
-            user_soil_passive_factor=s.user_soil_passive_factor,
-            user_soil_sliding_factor=s.user_soil_sliding_factor,
-            user_friction_angle=s.friction_angle,
-            user_undrained_shear_strength=0)
-        elif get_soil_type(params.soil_section.soil_type) in FINE_SOILS:
-            return create_soil(
-            user_soil_type=s.soil_type,
-            user_soil_consistency=s.fine_soil_consistency,
-            water_condition= get_water_condition(s.ground_condition),
-            ground_water_level=s.groundwater_level,
-            user_soil_passive_factor=s.user_soil_passive_factor,
-            user_soil_sliding_factor=s.user_soil_sliding_factor,
-            user_friction_angle=0,
-            user_undrained_shear_strength=s.undrained_shear_strength)
-        else:
-            raise ValueError(f"Unkown soil type: {params.soil_section.soil_type}")
+        thrust_block = fittings.fitting_from_params(params=params)
+
+        for i, entry in enumerate(thrust_block.fitting_workflow_res):
+
+            num = 7
+            # Add the dimension data
+            row = num + i
+            ws[f"A{row}"] = entry["label"]
+            ws[f"B{row}"] = entry["formula_xls"]
+            ws[f"F{row}"] = entry["output"]
+            ws[f"I{row}"] = entry["si_unit"]
+            ws[f"J{row}"] = entry["reference"]
         
-    def vertical_bend_checks(self, thrust_block: ThrustBlock):
-        if isinstance(thrust_block.fitting, fittings.VerticalBend):
-            if thrust_block.fitting.turn_direction == "upturn":
-                thrust_force_vertical = thrust_block.fitting.thrust_force_vertical()
-                ultimate_ground_bearing_resistance = thrust_block.ultimate_vertical_bearing_capacity
-                vertical_block_resistance_force = thrust_block.vertical_block_resistance_force
-                return f"""
-                <div class="name">Thrust force (vertical component)</div>
-                <div class="result">T<sub>z</sub> = P<sub>d</sub> x π /4 x (D<sub>O</sub>)<sup>2</sup> x sin(θ) = <b>{thrust_force_vertical:.2f} kN</b></div>
-                <div class="name">Ultimate ground bearing resistance</div>
-                <div class="result">q<sub>b</sub> = 6 x C<sub>u</sub> ÷ DF<sub>P</sub> = <b>{ultimate_ground_bearing_resistance:.2f} kN</b></div>
-                <div class="name">Vertical block resistance force</div>
-                <div class="result">Qb = q<sub>b</sub> x A<sub>b</sub> = <b>{vertical_block_resistance_force:.2f} kN</b></div>
-                <div class="name"><b>Vertical Ground Bearing Resistance check</b></div>
-                <div class="result"><b>{thrust_block.vertical_bend_check()}</b></div>
-                """
-            if thrust_block.fitting.turn_direction == "downturn":
-                return f"""
-                <div class="name">Thrust force (vertical component)</div>
-                <div class="result">{thrust_block.fitting.thrust_force_vertical():.2f}</div>
-                <div class="name">Effective weight of thrust block</div>
-                <div class="result">{thrust_block.effective_weight_thrust_block:.2f}</div>
-                <div class="name">Uplift factor of safety</div>
-                <div class="result">{thrust_block.uplift_factor_of_safety:.2f}</div>
-                <div class="name"><b>Vertical Uplift Check</b></div>
-                <div class="result"><b>{thrust_block.uplift_factor_of_safety_check()}</b></div>
-                """
-        else:
-            return f""""""
+        # Save the workbook to a file
+        from io import BytesIO
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
 
+        excel_file = vkt.File.from_data(buffer.read())
+        
+        return vkt.DownloadResult(excel_file, 'dimensions.xlsx')
+    
     @vkt.WebView("Thrust Block Analysis Report")
     def analyze_tb(self, params, **kwargs):
-        fitting_type = fittings.fitting_from_params(params=params)
-        # --- refactor below to civeng module to include params ---
-        soil_instance = self.create_soil_instance(params=params)
-        print(soil_instance)
-        # print(soil_instance.unit_weight)
-        # print(soil_instance.soil_type)
-        # print(soil_instance.soil_consistency)
-        # print(soil_instance.soil_category)
-        # --- end refactor ---
-        tb = params.block_section
-        thrust_block = create_thrust_block(
-            fitting = fitting_type,
-            soil = soil_instance,
-            user_height= tb.block_height,
-            user_width = tb.block_width,
-            user_length = tb.block_length,
-            user_depth_block= tb.block_depth
-        )
-        """Generate a simple HTML report."""
-        # Simple HTML with just an H1 title
+
+        image_path = Path(__file__).parent / "assets" / "Arcadis_logo.svg.png"
+        with open(image_path, "rb") as img_file:
+            img_base64 = base64.b64encode(img_file.read()).decode()
+
+        """Generates a thrust stability check HTML report."""
         html = f"""
         <!DOCTYPE html>
+        <html lang="en">
         <html>
         <head>
         <meta charset="UTF-8">
-            <style>
-                body {{
-                    font-family: Arial, sans-serif;
-                    background-color: #FFFFFF;
-                    margin: 0;
-                    padding: 20px;
-                }}
-                
-                h1 {{
-                    color: #FF6600;
-                    font-size: 36px;
-                    font-weight: bold;
-                    border-bottom: 4px solid #FF6600;
-                    padding-bottom: 10px;
-                    margin-top: 0;
-                }}
-                h2 {{
-                    color: #FF6600;
-                    font-size: 16px;
-                    font-weight: bold;
-                    border-bottom: 1px solid #FF6600;
-                    padding-bottom: 10px;
-                    margin-top: 0;
-                }}
-                .pb-12 {{ padding-bottom: 12px; }} /* adjust value as needed */
-                .row {{
-                    display: grid;
-                    grid-template-columns: auto auto; /* left auto, middle fills, right auto */
-                    align-items: baseline;                /* nice alignment for equations/text */
-                    gap: 12px;
-                    }}
-                .name   {{ justify-self: start;  }}
-                .result {{ justify-self: end;    text-align: right; }}
-            </style>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                background-color: #FFFFFF;
+                margin: 0;
+                padding: 20px;
+            }}
+
+            /* Full-width header with underline */
+            .header-fullwidth {{
+                width: 100%;
+                border-bottom: 4px solid #FF6600; /* full-width underline */
+                padding-bottom: 10px;
+                box-sizing: border-box;
+            }}
+            .header-inner {{
+                display: flex;
+                justify-content: space-between;
+                border-bottom: 3px solid #FF6600;
+                align-items: center;
+                gap: 16px;
+                width: 100%;
+            }}
+
+            /* Title (no border here — wrapper provides the underline) */
+            h1 {{
+                color: #FF6600;
+                font-size: 36px;
+                font-weight: bold;
+                margin: 0;
+                padding: 0;
+            }}
+
+            h2 {{
+                color: #FF6600;
+                font-size: 16px;
+                font-weight: bold;
+                border-bottom: 1px solid #FF6600;
+                padding-bottom: 10px;
+                margin-top: 20px;
+                margin-bottom: 0;
+            }}
+
+            .pb-12 {{ padding-bottom: 12px; }}
+
+            .row {{
+                display: grid;
+                grid-template-columns: auto auto auto;
+                align-items: baseline;
+                gap: 12px;
+            }}
+            .label     {{ justify-self: start; }}
+            .result    {{ justify-self: start; text-align: left; }}
+            .reference {{ justify-self: end; text-align: right; }}
+
+            .image-container {{
+                text-align: center;
+                margin: 20px 0;
+            }}
+            .image-container img {{
+                max-width: 100%;
+                height: auto;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 5px;
+            }}
+
+            /* logo sizing — responsive */
+            .logo {{
+                max-width: 200px;
+                height: auto;
+            }}
+            @media (max-width: 600px) {{
+                .logo {{ max-width: 120px; }}
+                 h1 {{ font-size: 28px; }}
+            }}
+        </style>
         </head>
         <body>
-            <h1> Thrust block sizing </h1>
+        <div class="header-inner">
+            <h1>Thrust block sizing</h1>
+            <img src="data:image/png;base64,{img_base64}" alt="Arcadis Logo" class="logo">
+        </div>
             <h2> {params.fitting_section.fitting_type} block </h2>
-            <div class="row">
-                <div class ="name"> Pressure fixed by the designer </div>
-                <div class="result">P = {params.fitting_section.maximum_design_pressure} kN/m2</div>
-                <div class ="name"> Height </div>
-                <div class="result"> H = {thrust_block.user_height} m</div>
-                <div class ="name"> Width </div>
-                <div class="result"> W = {thrust_block.user_width} m</div>
-                <div class ="name"> Length </div>
-                <div class="result"> L = {thrust_block.user_length} m</div>
-                <div class ="name"> Depth </div>
-                <div class="result"> Z<sub>b</sub> = {thrust_block.user_depth_block} m</div>
-            </div>
             <br>
             <div class="row">
-                {self.report_fitting_type_html(fitting_type)}
-            </div>
-            <br>
-            <div class="row">
-                {self.report_soil_type_html(soil_instance)}
-            </div>
-            <br>
-            <div class="row">
-                {self.pass_through_checks(thrust_block=thrust_block)}
-                {self.vertical_bend_checks(thrust_block=thrust_block)}
-                {self.overturning_checks(thrust_block=thrust_block)}
+                {self.render_workflow_html(params=params)}
             </div>
         </body>
         </html>
         """
         
         return vkt.WebResult(html=html)
-    
-    def generate_pdf(self, params, **kwargs):
-        """Generate a professional PDF report using HTML template."""
-        # Get the HTML from the reusable helper method
-        html_template = self.analyze_tb(params)
-        
-        # Create a File object from the HTML string
-        html_file = vkt.File.from_data(html_template)
-        
-        # Convert HTML to PDF using VIKTOR's built-in converter
-        pdf_file = vkt.convert_svg_to_pdf(html_file.open_binary())
-        
-        # Return as DownloadResult
-        return vkt.DownloadResult(pdf_file, "block_report.pdf")
 
     @vkt.GeometryView("3D Arrangement", duration_guess=1, x_axis_to_right=True)
     def visualize_thrust_block(self, params, **kwargs):

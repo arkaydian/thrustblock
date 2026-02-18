@@ -1,8 +1,9 @@
 import math
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Callable, Dict, Tuple, List 
-from app.civeng1.soils.soil_mechanics import Soil, EngRes, create_soil, UNIT_WEIGHT_WATER, CoarseSoil, FineSoil
+from typing import Dict, Any, Callable, Dict, Tuple, List, Union
+from app.civeng1.soils.soil_mechanics import Soil, EngRes, create_soil, UNIT_WEIGHT_WATER, CoarseSoil, FineSoil, CoarseEmbedment, FineEmbedment, Embedment, create_embedment
+from .pipes import WeldedPePipe
 
 #--- Utils and Types ---
 fitting_list = {
@@ -28,13 +29,13 @@ class Fitting(ABC):
     crown_depth: float
     soil_type: Soil
 
-    @abstractmethod
-    def head_loss(self, flow_rate: float, k_factor: float = 0.5) -> float:
-        ...
+    # @abstractmethod
+    # def head_loss(self, flow_rate: float, k_factor: float = 0.5) -> float:
+    #     ...
 
     @property
     def thrust_force_resultant(self) -> float:
-        ...
+        raise NotImplementedError("Subclass must implement this `thrust_force_resultant`")
         
     @property
     def area_disturbed_passive(self) -> float:
@@ -46,30 +47,22 @@ class Fitting(ABC):
             + (self.soil_type.sliding_resistance_base() * self.soil_type.area_base_sliding) \
             + (2 * self.soil_type.sliding_resistance_side * self.soil_type.area_side_sliding)
     
-    
-    # enter in each relevant type
     @property
     def overturning_level_arm(self) -> float:
         """
         Calculates the overturning lever arm for the thrust block based on fitting geometry.
         Returns 0 if no matching diameter attribute is found.
         """
-        # diameter_attrs = ["outside_diameter", "outside_diameter_branch", "outside_diameter_large"]
-        # for attr in diameter_attrs:
-        #     if hasattr(self.fitting, attr):
-        #         diameter = getattr(self.fitting, attr)
-        #         return self.user_depth_block - (self.fitting.crown_depth + diameter / 2)
-        # return 0
-        ...
+        raise NotImplementedError("Subclass must implement this `overturning_level_arm`")
 
     @property
     def passive_face_restoring_moment(self) -> float:
-          return self.soil_type.net_unit_area_soil_pressure * self.soil_type.thrust_block.width * ((self.soil_type.thrust_block.height ** 2 )/ 3)
-
+        if self.soil_type.thrust_block is None:
+                raise ValueError("Thrust Block not implemented")
+        return self.soil_type.net_unit_area_soil_pressure * self.soil_type.thrust_block.width * ((self.soil_type.thrust_block.height ** 2 )/ 3)
+    
     @property
     def over_turning_moment(self) -> float:
-        # if isinstance(self.fitting, VerticalBend):
-        #     return self.fitting.thrust_force_horizontal() * self.overturning_level_arm
         return self.thrust_force_resultant * self.overturning_level_arm
     
     @property
@@ -80,13 +73,15 @@ class Fitting(ABC):
     def vertical_reaction_block(self) -> float:
         # if isinstance(self.fitting, VerticalBend) and self.fitting.turn_direction == "downturn":
         #     return self.effective_weight_thrust_block
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return (self.soil_type.unit_weight - (self.soil_type.buoyancy_coefficient * UNIT_WEIGHT_WATER)) * \
             self.soil_type.thrust_block.depth * self.soil_type.thrust_block.width * self.soil_type.thrust_block.length
     
     @property
     def block_restoring_moment(self) -> float:
-        # if isinstance(self.fitting, VerticalBend) and self.fitting.turn_direction == "downturn":
-        #     return (self.net_vertical_reaction_block * (self.user_length / 2))
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return self.vertical_reaction_block * (self.soil_type.thrust_block.length / 2)
     
     @property
@@ -99,6 +94,8 @@ class Fitting(ABC):
 
     @property
     def thrust_block_standard_workflow(self) -> List[EngRes]:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return [
             {
                 "label": "Depth below ground to highest groundwater level",
@@ -274,6 +271,8 @@ class HorizontalBend(Fitting):
         Calculates the overturning lever arm for the thrust block based on fitting geometry.
         Returns 0 if no matching diameter attribute is found.
         """
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return self.soil_type.thrust_block.depth - (self.crown_depth + self.outside_diameter / 2)
     
     @property
@@ -523,7 +522,9 @@ class VerticalDownturnBend(Fitting):
     
     @property
     def area_disturbed_passive(self) -> float:
-            return 1.5 * self.outside_diameter * self.soil_type.thrust_block.height
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        return 1.5 * self.outside_diameter * self.soil_type.thrust_block.height
     
     @property    
     def buoyancy_coefficient(self) -> float:
@@ -538,6 +539,8 @@ class VerticalDownturnBend(Fitting):
     
     @property
     def effective_weight_thrust_block(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return self.soil_type.thrust_block.height * self.soil_type.thrust_block.width * self.soil_type.thrust_block.length \
               * (self.soil_type.thrust_block.reinforced_concrete_unit_weight - (self.buoyancy_coefficient * UNIT_WEIGHT_WATER))
     
@@ -547,10 +550,14 @@ class VerticalDownturnBend(Fitting):
         Calculates the overturning lever arm for the thrust block based on fitting geometry.
         Returns 0 if no matching diameter attribute is found.
         """
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return self.soil_type.thrust_block.depth - (self.crown_depth + self.outside_diameter / 2)
 
     @property
     def vertical_reaction_block(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return (self.soil_type.thrust_block.reinforced_concrete_unit_weight - (self.buoyancy_coefficient * UNIT_WEIGHT_WATER)) * \
             self.soil_type.thrust_block.height * self.soil_type.thrust_block.width * self.soil_type.thrust_block.length
     
@@ -560,6 +567,8 @@ class VerticalDownturnBend(Fitting):
 
     @property
     def block_restoring_moment(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return self.net_vertical_reaction_block * (self.soil_type.thrust_block.length / 2)
     
 
@@ -569,6 +578,8 @@ class VerticalDownturnBend(Fitting):
     
     @property
     def thrust_block_standard_workflow(self) -> List[EngRes]:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return [
             {
                 "label": "Depth below ground to highest groundwater level",
@@ -842,6 +853,8 @@ class Tee(Fitting):
         Calculates the overturning lever arm for the thrust block based on fitting geometry.
         Returns 0 if no matching diameter attribute is found.
         """
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return self.soil_type.thrust_block.depth - (self.crown_depth + self.outside_diameter_branch / 2)
 
     @property
@@ -912,6 +925,8 @@ class AngleBranch(Fitting):
         Calculates the overturning lever arm for the thrust block based on fitting geometry.
         Returns 0 if no matching diameter attribute is found.
         """
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return self.soil_type.thrust_block.depth - (self.crown_depth + self.outside_diameter_branch / 2)
 
     @property
@@ -993,6 +1008,8 @@ class ClosedValve(Fitting):
     
     @property
     def area_disturbed_passive(self):
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return 1.5 * self.outside_diameter \
             * (self.soil_type.thrust_block.height + self.outside_diameter + self.crown_depth - self.soil_type.thrust_block.depth)
     
@@ -1002,6 +1019,8 @@ class ClosedValve(Fitting):
         Calculates the overturning lever arm for the thrust block based on fitting geometry.
         Returns 0 if no matching diameter attribute is found.
         """
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return self.soil_type.thrust_block.depth - (self.crown_depth + self.outside_diameter / 2)
     
     @property
@@ -1074,6 +1093,8 @@ class BlankEnd(Fitting):
     
     @property
     def area_disturbed_passive(self):
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return 1.5 * self.outside_diameter \
             * (self.soil_type.thrust_block.height + self.outside_diameter + self.crown_depth - self.soil_type.thrust_block.depth)
     
@@ -1083,6 +1104,8 @@ class BlankEnd(Fitting):
         Calculates the overturning lever arm for the thrust block based on fitting geometry.
         Returns 0 if no matching diameter attribute is found.
         """
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return self.soil_type.thrust_block.depth - (self.crown_depth + self.outside_diameter / 2)
 
     @property
@@ -1158,7 +1181,9 @@ class TaperThrust(Fitting):
     
     @property
     def area_disturbed_passive(self):
-            return 1.5 * self.outside_diameter_large \
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        return 1.5 * self.outside_diameter_large \
             * (self.soil_type.thrust_block.height + self.outside_diameter_large + self.crown_depth - self.soil_type.thrust_block.depth)
     
     @property
@@ -1167,6 +1192,8 @@ class TaperThrust(Fitting):
         Calculates the overturning lever arm for the thrust block based on fitting geometry.
         Returns 0 if no matching diameter attribute is found.
         """
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
         return self.soil_type.thrust_block.depth - (self.crown_depth + self.outside_diameter_large / 2)    
 
     @property
@@ -1229,11 +1256,96 @@ class TaperThrust(Fitting):
         ]
         return fitting_dims + self.thrust_block_standard_workflow + self.soil_type.soil_res + thrust_pass_through_res \
         + self.thrust_block_over_turning_stability_check_workflow
+    
+@dataclass(frozen=True)
+class FlangedMetallicPipe(Fitting):
+    embedment_type: Embedment
 
+    @property
+    def buoyancy_coefficient(self):
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        return 1 - (self.soil_type.ground_water_level / self.soil_type.thrust_block.depth)
+    
+    @property
+    def area_disturbed_passive(self):
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        return 1.5 * self.embedment_type.pipe.outside_diameter \
+            * (self.soil_type.thrust_block.height + self.embedment_type.pipe.outside_diameter + self.embedment_type.pipe.crown_depth - self.soil_type.thrust_block.depth)
+    
+    @property
+    def block_resistance(self) -> float:
+        return self.soil_type.net_unit_area_soil_pressure * (self.soil_type.area_passive_face - self.area_disturbed_passive) \
+            + (self.soil_type.sliding_resistance_base() * self.soil_type.area_base_sliding) \
+            + (2 * self.soil_type.sliding_resistance_side * self.soil_type.area_side_sliding)
+    
+    @property
+    def overturning_level_arm(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        return self.soil_type.thrust_block.depth - (self.embedment_type.pipe.crown_depth + self.embedment_type.pipe.outside_diameter / 2)
+    
+    @property
+    def over_turning_moment(self) -> float:
+        return self.embedment_type.contraction_design_force * self.overturning_level_arm
+
+    @property
+    def fitting_workflow_res(self) -> List[EngRes]:
+        thrust_pass_through_check = f"<span style='color: green'><b>{self.block_resistance:.2f} kN > {self.embedment_type.contraction_design_force:.2f} kN, Passes thrust resistance</b></span>" \
+        if self.block_resistance > self.embedment_type.contraction_design_force else \
+        f"<span style='color: red'><b>{self.embedment_type.contraction_design_force:.2f} kN> {self.block_resistance:.2f} kN, Fails thrust resistance</b></span>"
+        
+        fitting_dims: List[EngRes] = [
+            {
+                "label": "Pipe outside diameter",
+                "output": self.embedment_type.pipe.outside_diameter,
+                "si_unit": "m",
+                "formula_html": f"D<sub>O</sub> = {self.embedment_type.pipe.outside_diameter} m",
+                "formula_xls": "D_OB = ",
+                "reference": " - "
+            },
+        ]
+        thrust_pass_through_res: List[EngRes] = [
+            {
+                "label": "Disturbed passive area due to pipe trench",
+                "output": self.area_disturbed_passive,
+                "si_unit": "m",
+                "formula_html": f"A<sub>d</sub> = 1.5 x D<sub>O_A</sub> x (H + D<sub>O_A</sub> + Z<sub>O</sub> - Z<sub>b</sub>) = <b>{self.area_disturbed_passive:.2f} m2</b>",
+                "formula_xls": "A_d = ",
+                "reference": "Section 4.1.1"
+            },
+            {
+                "label": "Block resistance force",
+                "output": self.block_resistance,
+                "si_unit": "m",
+                "formula_html": f"R<sub>s</sub> = σ<sub>pa</sub> x (A<sub>f</sub> – A<sub>d</sub>) + (𝜏<sub>b</sub> x A<sub>b</sub>) + (2 x 𝜏<sub>s</sub> x A<sub>S</sub>) = <b>{self.block_resistance:.2f} kN</b>",
+                "formula_xls": "R_s = ",
+                "reference": "Section 4.1.1"
+            },
+            {
+                "label": "Design force",
+                "output": self.embedment_type.contraction_design_force,
+                "si_unit": "kN",
+                "formula_html": f"F<sub>d</sub> = <b>{self.embedment_type.contraction_design_force:.2f} kN</b>",
+                "formula_xls": "F_D",
+                "reference": "Figure 2.3"
+            },
+            {
+                "label": "Pass through resistance check",
+                "output": thrust_pass_through_check,
+                "si_unit": "",
+                "formula_html": f"{thrust_pass_through_check}",
+                "formula_xls": "",
+                "reference": " - "
+            }
+        ]
+        return self.embedment_type.pipe.render_workflow_report + fitting_dims + self.embedment_type.render_workflow_report + self.thrust_block_standard_workflow + self.soil_type.soil_res + thrust_pass_through_res \
+        + self.thrust_block_over_turning_stability_check_workflow
+    
 # --- Builder and Registry ---
 
 BUILDERS: Dict[str, Callable[[Any], Fitting]] = {}
-
 
 def register(fitting_key: str):
     """
@@ -1332,6 +1444,16 @@ def build_taper_thrust(params: Any) -> Fitting:
         soil_type=create_soil(params),
         outside_diameter_large = s.outside_diameter_large,
         outside_diameter_small = s.outside_diameter_small
+    )
+
+@register("metallic_flange")
+def build_metallic_flange(params: Any) -> Fitting:
+    s = params.pipe_section
+    return FlangedMetallicPipe(
+        maximum_design_pressure = s.maximum_design_pressure,
+        crown_depth = s.crown_depth,
+        soil_type=create_soil(params),
+        embedment_type=create_embedment(params)
     )
 #remove **kwargs
 def fitting_from_params(params: Any, **kwargs) -> Fitting:

@@ -67,6 +67,67 @@ class WaterCondition(Enum):
     ABOVE_WATER = "Above Water"
     BELOW_WATER = "Below Water"
 
+class EmbedmentCategory(Enum):
+    """
+    Docstring for CoarseEmbedmentClass To Be implemented
+    """
+    COARSE = "coarse"
+    CLAY = "clay"
+
+    @property
+    def label_capitalized(self):
+        # Capitalize first letter, preserve rest
+        if not self.value:
+            return self.value
+        return self.value[0].upper() + self.value[1:]
+
+class EmbedmentClass(Enum):
+    """
+    Docstring for CoarseEmbedmentClass To Be implemented
+    """
+    S_ONE = ("s1", EmbedmentCategory.COARSE)
+    S_TWO = ("s2", EmbedmentCategory.COARSE)
+    S_THREE = ("s3", EmbedmentCategory.COARSE)
+    S_FOUR = ("s4", EmbedmentCategory.COARSE)
+    S_FIVE = ("s5", EmbedmentCategory.CLAY)
+
+    def __init__(self, label, category):
+        self.label = label
+        self.category = category
+
+    @property
+    def label_capitalized(self):
+        # Capitalize only the first character, leave the rest as-is
+        if not self.label:
+            return self.label
+        return self.label[0].upper() + self.label[1:]
+    
+    @classmethod
+    def from_frontend(cls, code: str) -> "EmbedmentClass":
+        if not isinstance(code, str):
+            raise TypeError("code must be a string")
+        key = code.strip()
+
+        # 1) Try exact frontend label match (e.g. "s1", "S2")
+        for member in cls:
+            if member.label.lower() == key.lower():
+                return member  # return the enum member, not member.value
+        raise ValueError(f"Unknown embedment code: {code!r}")
+
+# class EmbedmentCompactness(Enum):
+#     UNCOMPACTED = ("uncompacted", EmbedmentCategory.COARSE)
+#     COMPACTED_EIGHTY_FIVE = ("compacted sands and gravels (85%)", EmbedmentCategory.COARSE)
+#     COMPACTED_NINETY = ("compacted sands and gravels (95%)", EmbedmentCategory.COARSE)
+#     COMPACTED_CLAY_EIGHTY_FIVE = ("compacted clays (85%)", EmbedmentCategory.CLAY)
+#     COMPACTED_CLAY_NINETY = ("compacted clays (90%)", EmbedmentCategory.CLAY)
+    
+#     def __init__(self, label, category):
+#         self.label = label
+#         self.category = category
+
+
+
+
 @dataclass(frozen=True)
 class BearingCapacityCoefficients:
     n_c: float

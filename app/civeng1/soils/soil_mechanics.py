@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from abc import ABC
-from typing import Any, Tuple, List, Dict, Callable, Union
+from typing import Any, Tuple, List, Dict, Callable, Union, Literal, Optional
 import math
 from app.civeng1.structures.concrete import ThrustBlock, create_thrust_block
+from app.civeng1.hydraulics.pipes import WeldedPePipe, create_pipe
 
 from .constants import *
 from .soil_enum import *
@@ -14,6 +15,18 @@ FINE_SOILS = (SoilType.CLAY)
 
 ReportRow = Tuple[str, str]
 EngRes = dict[str, Union[float, str]]
+
+COMPACTION_MAP = {
+    "Uncompacted processed gravels": "uncompacted_process_gravels",
+    "Compacted sands and gravels (85%)": "compacted_sand_and_gravels_eighty_five",
+    "Compacted sands and gravels (90%)": "compacted_sand_and_gravels_ninety",
+    "Compacted clays (85%)": "compacted_clays_eighty_five",
+    "Compacted clays (90%)": "compacted_clays_ninety",
+    "Soft Clay" : "soft_clay",
+    "Firm or Stiff Clay": "firm_stiff_clay"
+}
+
+SectionName = Literal["soil_section", "backfill_section"]
 
 #--- errors ---
 class SoilLookupError(Exception):
@@ -46,6 +59,10 @@ def get_water_condition(condition: str) -> WaterCondition:
         if water_condition.value.lower() == condition.lower():
             return water_condition
     raise ValueError(f"No WaterCondition found for label: {condition}")
+
+def get_embedment_key(user_key: str) -> str:
+    key = user_key.strip()
+    return COMPACTION_MAP[key]
 
 # def classify_soil(soil_type: SoilType, soil_consistency: SoilConsistency) -> SoilDesignClass:
 #     """Classifies soil as Class 1, 2, or 3 based on type and SoilConsistency."""
@@ -105,7 +122,7 @@ class Soil(ABC):
     soil_passive_factor: float
     soil_sliding_factor: float
     soil_category: SoilCategory
-    thrust_block: ThrustBlock
+    thrust_block: Optional[ThrustBlock]
 
     @property
     def unit_weight(self) -> float:
@@ -144,11 +161,15 @@ class Soil(ABC):
                 f"water_condition={self.water_condition.name}"
             ) from e
         
-    @property
+    @property    
     def area_passive_face(self) -> float:
         """
-        Returns the pressure bearing area of the thrust block (m2).
+        Return the pressure bearing area of the thrust block (m²).
+        Raises ValueError if there is no thrust block.
         """
+        if self.thrust_block is None:
+            raise ValueError("Thrust block is not defined.")
+        # At this point, self.thrust_block is not None
         return self.thrust_block.height * self.thrust_block.width
     
     @property
@@ -156,6 +177,8 @@ class Soil(ABC):
         """
         Returns the sliding area per side of the thrust block (m2)
         """
+        if self.thrust_block is None:
+            raise ValueError("Thrust block is not defined.")
         return self.thrust_block.length * self.thrust_block.width
     
     @property
@@ -172,6 +195,8 @@ class Soil(ABC):
         """
         # if isinstance(self.fitting, VerticalBend) and self.fitting.turn_direction == "downturn":
         #     return 1
+        if self.thrust_block is None:
+            raise ValueError("Thrust block is not defined.")
         return 1 - (self.ground_water_level / self.thrust_block.depth)
     
     def sliding_resistance_base(self, is_vertical_downturn: bool = False) -> float:
@@ -239,6 +264,8 @@ class CoarseSoil(Soil):
         """
         Returns the sliding area per side of the thrust block dependant on soil category.
         """
+        if self.thrust_block is None:
+            raise ValueError("Thrust block is not defined.")
         return self.thrust_block.height * self.thrust_block.length
 
     
@@ -246,6 +273,8 @@ class CoarseSoil(Soil):
         """
         Calculates net unit area soil pressure for the soil block.
         """
+        if self.thrust_block is None:
+            raise ValueError("Thrust block is not defined.")
         if is_vertical_downturn:
             return 0
         depth = self.thrust_block.user_effective_depth if self.thrust_block.user_effective_depth is not None else self.thrust_block.depth
@@ -258,6 +287,9 @@ class CoarseSoil(Soil):
         """
         Calculates Sliding Resistance for the soil block sides.
         """
+        if self.thrust_block is None:
+            raise ValueError("Thrust block is not defined.")
+        
         depth = self.thrust_block.user_effective_depth if self.thrust_block.user_effective_depth is not None else self.thrust_block.depth
         height = self.thrust_block.user_effective_height if self.thrust_block.user_effective_height is not None else self.thrust_block.height
         return ((self.unit_weight - (self.buoyancy_coefficient * UNIT_WEIGHT_WATER))
@@ -270,6 +302,8 @@ class CoarseSoil(Soil):
         """
         Calculates net unit area soil pressure for the soil block.
         """
+        if self.thrust_block is None:
+            raise ValueError("Thrust block is not defined.")
         depth_block_base = self.thrust_block.user_effective_depth if self.thrust_block.user_effective_depth is not None else self.thrust_block.depth
         height = self.thrust_block.user_effective_height if self.thrust_block.user_effective_height is not None else self.thrust_block.height
         return ((self.unit_weight - (self.buoyancy_coefficient * UNIT_WEIGHT_WATER)) 
@@ -278,6 +312,9 @@ class CoarseSoil(Soil):
     
     @property
     def ultimate_vertical_bearing_capacity(self) -> float:
+        if self.thrust_block is None:
+            raise ValueError("Thrust block is not defined.")
+        
         return (0.5 * (self.unit_weight - (self.buoyancy_coefficient * UNIT_WEIGHT_WATER)) * self.bearing_capacity_coefficients.n_y \
                     * min(self.thrust_block.length, self.thrust_block.width) \
                     + ((self.unit_weight - (self.buoyancy_coefficient * UNIT_WEIGHT_WATER)) * (self.bearing_capacity_coefficients.n_q - 1) * self.thrust_block.depth))
@@ -500,7 +537,239 @@ class FineSoil(Soil):
                 "reference": ""
             },
         ]
+
+#--- Embedment soils for inline anchor block and pipe restraint calcs ---
+
+@dataclass
+class Embedment(ABC):
+    ground_water_level: float
+    pipe: WeldedPePipe
+    backfill_soil: Soil
+
+    @property
+    def buoyancy_coefficient(self) -> float:
+        return 1 - (self.ground_water_level / (self.pipe.crown_depth + self.pipe.outside_diameter/2))
     
+    @property
+    def sliding_resistance_force(self) -> float:
+        raise NotImplementedError("Child class to implement sliding_resistance_force")
+    
+    @property
+    def embedment_sliding_resistance_factor(self) -> float:
+        raise ValueError("Child class to implement embedment_sliding_resistance_factor")
+    
+    @property
+    def long_short_pipe_transition_length(self) -> float:
+        return math.sqrt((8 * self.pipe.elastic_modulus * self.pipe.cross_sectional_area * self.pipe.allowable_contraction_movement) / self.sliding_resistance_force)
+    
+    @property
+    def contraction_design_force(self) -> float:
+        print(self.pipe.liquid_pressure_long_longitudinal_force, self.pipe.temperature_longitudinal_force)
+        if self.pipe.length > self.long_short_pipe_transition_length:
+            return self.pipe.liquid_pressure_long_longitudinal_force + self.pipe.temperature_longitudinal_force - math.sqrt(2 * self.pipe.elastic_modulus * self.pipe.cross_sectional_area * self.pipe.allowable_contraction_movement * self.sliding_resistance_force)
+        if self.long_short_pipe_transition_length > self.pipe.length:
+            return self.pipe.liquid_pressure_long_longitudinal_force + self.pipe.temperature_longitudinal_force - ((2 * self.pipe.elastic_modulus * self.pipe.allowable_contraction_movement) / self.pipe.length) - ((self.pipe.length * self.sliding_resistance_force) / 4)
+        raise ValueError("Pipe length or long short pipeline transition length not calculated")
+    
+    @property
+    def render_workflow_report(self) -> list[EngRes]:
+        raise NotImplementedError("Subclass to implement `render_workflow_report`")
+
+@dataclass
+class CoarseEmbedment(Embedment):
+    compaction_class: Literal["Uncompacted processed gravels", "Compacted sands and gravels (85%)", "Compacted sands and gravels (90%)"]
+    embedment_class: EmbedmentClass
+    embedment_category: EmbedmentCategory = EmbedmentCategory.COARSE
+    
+    @property
+    def get_category_compactness(self) -> str:
+        return get_embedment_key(self.compaction_class)
+
+    @property
+    def friction_reduction_factor(self) -> float:
+        return SOIL_EMBEDMENT_PROPERTIES[self.embedment_category][self.embedment_class]["friction_angle_reduction"]
+
+    @property
+    def effective_angle_shearing_resistance(self) -> float:
+        return SOIL_EMBEDMENT_PROPERTIES[self.embedment_category][self.embedment_class][self.get_category_compactness]["effective_angle_shearing_resistance"]
+    
+    @property
+    def embedment_sliding_resistance_factor(self) -> float:
+        return SOIL_EMBEDMENT_PROPERTIES[self.embedment_category][self.embedment_class][self.get_category_compactness]["embedment_sliding_resistance_factor"]
+    
+    @property
+    def sliding_resistance_force(self) -> float:
+        return self.pipe.pipe_material_factor * 2 * self.pipe.outside_diameter \
+        * (self.backfill_soil.unit_weight - (self.buoyancy_coefficient * UNIT_WEIGHT_WATER)) \
+        * (self.pipe.crown_depth + 0.3 * self.pipe.outside_diameter) \
+        * math.tan(math.radians(self.friction_reduction_factor * self.effective_angle_shearing_resistance)) \
+        / self.embedment_sliding_resistance_factor
+    
+    @property
+    def embedment_class_report(self) -> str:
+        return f"{self.embedment_category.label_capitalized} Class {self.embedment_class.label_capitalized} pipe embedment"
+    
+    @property
+    def render_workflow_report(self) -> List[EngRes]:
+        return [
+            {
+                "label": "Embedment class",
+                "output": self.embedment_class_report,
+                "si_unit": "",
+                "formula_html": f"{self.embedment_class_report}",
+                "formula_xls": "",
+                "reference": " - "
+            },
+            {
+                "label": "Compaction level",
+                "output": self.compaction_class,
+                "si_unit": "",
+                "formula_html": f"{self.compaction_class}",
+                "formula_xls": "",
+                "reference": " Table 3.3 "
+            },
+            {
+                "label": "Embedment effective angle of shearing resistance",
+                "output": self.effective_angle_shearing_resistance,
+                "si_unit": "°",
+                "formula_html": f"ϕ'<sub>e</sub> = {self.effective_angle_shearing_resistance}°",
+                "formula_xls": "ϕ'_sub",
+                "reference": " Table 3.3 "
+            },
+            {
+                "label": "Embedment friction reduction factor",
+                "output": self.friction_reduction_factor,
+                "si_unit": "°",
+                "formula_html": f"f<sub>ϕ'</sub><sub>e</sub> = {self.friction_reduction_factor}°",
+                "formula_xls": "F_ϕ'",
+                "reference": " Table 3.3 "
+            },
+            {
+                "label": "Backfill unit weight (TO BE IMPLEMENTED)",
+                "output": self.backfill_soil.unit_weight,
+                "si_unit": "kN/m3",
+                "formula_html": f"γ<sub>S</sub> = {self.backfill_soil.unit_weight} kN/m3",
+                "formula_xls": "γ_S",
+                "reference": " Table 3.5 "
+            },
+            {
+                "label": "Pipe material factor",
+                "output": self.pipe.pipe_material_factor,
+                "si_unit": "",
+                "formula_html": f"ϕ<sub>m</sub> = {self.pipe.pipe_material_factor}",
+                "formula_xls": "ϕ_m",
+                "reference": "Section 3.2.3"
+            },
+            {
+                "label": "Displacement limitation factor – embedment sliding resistance",
+                "output": self.embedment_sliding_resistance_factor,
+                "si_unit": "",
+                "formula_html": f"DF<sub>F</sub> = {self.embedment_sliding_resistance_factor}",
+                "formula_xls": "DF_F",
+                "reference": "Table 3.9"
+            },
+            {
+                "label": "Depth below ground to highest groundwater level",
+                "output": self.ground_water_level,
+                "si_unit": "m",
+                "formula_html": f"Z<sub>GW</sub> = {self.ground_water_level}",
+                "formula_xls": "Z_GW",
+                "reference": "Table 3.9"
+            },
+            {
+                "label": "Groundwater unit weight",
+                "output": UNIT_WEIGHT_WATER,
+                "si_unit": "kN/m2",
+                "formula_html": f"γ<sub>W</sub> = {UNIT_WEIGHT_WATER} kN/m<sup>2</sup>",
+                "formula_xls": "γ_W",
+                "reference": "Table 3.5"
+            },
+            {
+                "label": "Buoyancy coefficient for pipe embedment",
+                "output": self.buoyancy_coefficient,
+                "si_unit": "",
+                "formula_html": f"C<sub>GW</sub> = 1 – (Z<sub>GW</sub> ÷ (Z<sub>O</sub> + D<sub>O</sub>/2)) = <b>{self.buoyancy_coefficient:.2f}</b>",
+                "formula_xls": "C_GW",
+                "reference": "Section 3.5"
+            },
+            {
+                "label": "Embedment friction resistance force",
+                "output": self.sliding_resistance_force,
+                "si_unit": "kN/m",
+                "formula_html": f" F<sub>F</sub> = ϕ<sub>m</sub> &times; 2 &times; D<sub>o</sub> &times; (Y<sub>s</sub> &minus; \
+                    (C<sub>GW</sub> &times; Y<sub>w</sub>)) &times; (Z<sub>0</sub> + 0.3 &times; D<sub>o</sub>) &times; \
+                        tan(f<sub>ue</sub> &times; &phi;<sup>&prime;</sup>) &divide; DF<sub>F</sub> = <b>{self.sliding_resistance_force:.2f}</b> ",
+                "formula_xls": "Ff = Qm * 2 * Do * (Ys - (CGW * Yw)) * (Z0 + 0.3 * Do) * tan(fue * φ′) / DFF",
+                "reference": "Section 3.7.3"
+            },
+            {
+                "label": "Embedment sliding resistance force",
+                "output": self.sliding_resistance_force,
+                "si_unit": "kN/m",
+                "formula_html": f" F<sub>S</sub> = F<sub>F</sub> = <b>{self.sliding_resistance_force:.2f}</b> ",
+                "formula_xls": "F_S",
+                "reference": "Section 4.1.2.3 Step 4"
+            },
+            {
+                "label": "Long/short PE pipeline transition length",
+                "output": self.long_short_pipe_transition_length,
+                "si_unit": "kN/m",
+                "formula_html": f" <p>L<sub>s</sub> = √(8 x E x A<sub>w</sub> x ΔL<sub>M</sub> / F<sub>s</sub>) = <b>{self.long_short_pipe_transition_length:.2f} m</b></p>",
+                "formula_xls": "L_S = sqrt(8 * E * A_W * ΔL_M / F_S) ",
+                "reference": "Section 4.1.2.3 Step 4"
+            },
+            {
+                "label": "Pipeline contraction design force",
+                "output": self.contraction_design_force,
+                "si_unit": "kN",
+                "formula_html": f"F<sub>AS</sub> = F<sub>p</sub> + F<sub>T</sub> - (2 * E * A<sub>w</sub> * ALM * L<sub>o</sub> / L<sub>s</sub>) \
+                    - (L<sub>o</sub> * F<sub>s</sub> / 4) = <b>{self.contraction_design_force:.2f}</b>" if self.long_short_pipe_transition_length > self.pipe.length \
+                    else f"<p>F<sub>AS</sub> = F<sub>p</sub> + F<sub>T</sub> - (2 * E * A<sub>w</sub> * ALM * L<sub>o</sub> / L<sub>s</sub>) - (L<sub>o</sub> * F<sub>s</sub> ÷ 4) = <b>{self.contraction_design_force:.2f}</b></p>",
+                "formula_xls": "F_S",
+                "reference": "Section 4.1.2.3 Step 5a" if self.long_short_pipe_transition_length else "Section 4.1.2.3 Step 5b"
+            },
+            {
+                "label": "Pipeline contraction design force",
+                "output": self.contraction_design_force,
+                "si_unit": "kN/m",
+                "formula_html": f"F<sub>D</sub> = <b>{self.contraction_design_force:.2f}</b>",
+                "formula_xls": "F_D",
+                "reference": "Section 4.1.2.3 Step"
+            },
+        ]
+
+@dataclass
+class FineEmbedment(Embedment):
+    adhesion: Literal["Soft Clay", "Firm or Stiff Clay"]
+    compaction_class: Literal["Compacted clays (85%)", "Compacted clays (90%)"]
+    embedment_category: EmbedmentCategory = EmbedmentCategory.CLAY
+    embedment_class: EmbedmentClass = EmbedmentClass.S_FIVE
+    
+    @property
+    def get_category_compactness(self) -> str:
+        return get_embedment_key(self.compaction_class)
+        
+    @property
+    def representative_adhesion(self) -> float:
+        return SOIL_EMBEDMENT_PROPERTIES[self.embedment_category][self.embedment_class]["representative_adhesion"][self.adhesion]
+
+    @property
+    def adhesion_reduction_factor(self) -> float:
+        return SOIL_EMBEDMENT_PROPERTIES[self.embedment_category][self.embedment_class][self.get_category_compactness]["adhesion_reduction_factor"]
+    
+    @property
+    def embedment_sliding_resistance_factor(self) -> float:
+        return SOIL_EMBEDMENT_PROPERTIES[self.embedment_category][self.embedment_class][self.get_category_compactness]["embedment_sliding_resistance_factor"]
+    
+    @property
+    def sliding_resistance_force(self) -> float:
+        return self.pipe.pipe_material_factor \
+        * self.representative_adhesion * math.pi * self.pipe.outside_diameter \
+        / self.embedment_sliding_resistance_factor
+    
+    @property
+    def ebmedment_class(self) -> str:
+        return f"{self.embedment_category.label_capitalized} Class {self.embedment_class.label_capitalized} pipe embedment"
     
 # --- Registry-based factory ---
 
@@ -535,7 +804,7 @@ def build_coarse_soil(
     ground_water_level: float,
     soil_passive_factor: float,
     soil_sliding_factor: float,
-    thrust_block: ThrustBlock,
+    thrust_block: Optional[ThrustBlock],
     friction_angle: float
 ) -> Soil:
     return CoarseSoil(
@@ -559,7 +828,7 @@ def build_fine_soil(
     ground_water_level: float,
     soil_passive_factor: float,
     soil_sliding_factor: float,
-    thrust_block: ThrustBlock,
+    thrust_block: Optional[ThrustBlock],
     undrained_shear_strength: float,
 ) -> Soil:
     return FineSoil(
@@ -574,11 +843,12 @@ def build_fine_soil(
         undrained_shear_strength=undrained_shear_strength,
     )
 
-def create_soil(params: Any) -> Soil:
-    """
-    Factory function to create a Soil instance with validation via registry.
-    """
-    s = params.soil_section
+def create_soil(params: Any, section_name: SectionName = "soil_section") -> Soil:
+
+    s = getattr(params, section_name, None)
+    if s is None:
+        raise ValueError(f"{section_name!r} not found on params")
+    
     soil_type = get_soil_type(s.soil_type)
     soil_coarse_consistency = get_soil_consistency(s.coarse_soil_consistency)
     soil_fine_consistency = get_soil_consistency(s.fine_soil_consistency)
@@ -624,9 +894,83 @@ def create_soil(params: Any) -> Soil:
     # Fallback for any other registered builders
     raise ValueError("Unkown soil type")
 
+EmbedmentBuilder = Callable[..., Embedment]
+EMBEDMENT_REGISTRY: Dict[EmbedmentClass, EmbedmentBuilder] = {}
+
+def register_embedment(*embedment_class: EmbedmentClass):
+    def decorator(builder: EmbedmentBuilder):
+        for ec in embedment_class:
+            EMBEDMENT_REGISTRY[ec] = builder
+        return builder
+    return decorator
+
+@register_embedment(EmbedmentClass.S_ONE, EmbedmentClass.S_TWO, EmbedmentClass.S_THREE, EmbedmentClass.S_FOUR)
+def build_coarse_embedment(
+    *,    
+    ground_water_level: float,
+    pipe: WeldedPePipe,
+    backfill_soil: Soil,
+    compaction_class: Literal["Uncompacted processed gravels", "Compacted sands and gravels (85%)", "Compacted sands and gravels (90%)"],
+    embedment_class: EmbedmentClass,
+    ) -> Embedment:
+
+   return CoarseEmbedment(
+        ground_water_level = ground_water_level,
+        pipe = pipe,
+        backfill_soil = backfill_soil,
+        compaction_class = compaction_class,
+        embedment_class = embedment_class,
+    )
+
+@register_embedment(EmbedmentClass.S_FIVE)
+def build_fine_embedment(
+    *,    
+    ground_water_level: float,
+    pipe: WeldedPePipe,
+    backfill_soil: Soil,
+    adhesion: Literal["Soft Clay", "Firm or Stiff Clay"],
+    compaction_class: Literal["Compacted clays (85%)", "Compacted clays (90%)"],
+    embedment_class: EmbedmentClass
+) -> Embedment:
+
+   return FineEmbedment(
+        ground_water_level = ground_water_level,
+        pipe = pipe,
+        backfill_soil = backfill_soil,
+        adhesion=adhesion,
+        compaction_class=compaction_class,
+        embedment_class=embedment_class
+        )
+
+def create_embedment(params: Any) -> Embedment:
+    e = params.embedment_section
+    ground_water_level = e.ground_water_level
+    pipe = create_pipe(params)
+    backfill_soil = create_soil(params=params, section_name="backfill_section")
+    embedment_class = EmbedmentClass.from_frontend(e.embedment_class)
+    try:
+        builder = EMBEDMENT_REGISTRY[embedment_class]
+    except:
+        raise ValueError(f"No registered builder for embedment type: {embedment_class}") from e
+
+    common_embedment = dict(
+        ground_water_level = ground_water_level,
+        pipe = pipe,
+        backfill_soil = backfill_soil,
+        embedment_class = embedment_class
+    )
+    coarse_compaction_class = e.coarse_compaction_class
+    fine_compaction_class = e.fine_compaction_class
+    adhesion = e.adhesion
+
+    if builder is build_coarse_embedment:
+        return builder(**common_embedment, compaction_class=coarse_compaction_class)
+
+    if builder is build_fine_embedment:
+        return builder(**common_embedment, adhesion=adhesion, compaction_class=fine_compaction_class)
+   
+    raise ValueError("Unkown embedment type")
+
 # --- Example usage ---
 def main():
     ...
-
-if __name__ == "__main__":
-    main()

@@ -13,6 +13,88 @@ SOIL_PROPERTIES = {
     }
 }
 
+SOIL_EMBEDMENT_PROPERTIES = {
+    EmbedmentCategory.COARSE : {
+        EmbedmentClass.S_ONE: {
+            "friction_angle_reduction": 0.8,
+            "uncompacted_process_gravels": {
+                "embedment_sliding_resistance_factor": 2.5,
+                "effective_angle_shearing_resistance": 32
+            },
+            "compacted_sand_and_gravels_eighty_five": {      
+                "embedment_sliding_resistance_factor": None,
+                "effective_angle_shearing_resistance": None
+            },
+            "compacted_sand_and_gravels_ninety": {
+            "embedment_sliding_resistance_factor": None,
+                "effective_angle_shearing_resistance": None
+            },
+        },
+        EmbedmentClass.S_TWO: {
+            "friction_angle_reduction": 0.8,
+            "uncompacted_process_gravels": {
+                "embedment_sliding_resistance_factor": 2.5,
+                "effective_angle_shearing_resistance": 32
+            },
+            "compacted_sand_and_gravels_eighty_five": {      
+                "embedment_sliding_resistance_factor": 2,
+                "effective_angle_shearing_resistance": 36
+            },
+            "compacted_sand_and_gravels_ninety": {
+                "embedment_sliding_resistance_factor": 2,
+                "effective_angle_shearing_resistance": 38
+            },
+        },
+        EmbedmentClass.S_THREE: {
+            "friction_angle_reduction": 0.8,
+            "uncompacted_process_gravels": {
+                "embedment_sliding_resistance_factor": None,
+                "effective_angle_shearing_resistance": None
+            },
+            "compacted_sand_and_gravels_eighty_five": {      
+                "embedment_sliding_resistance_factor": 2,
+                "effective_angle_shearing_resistance": 36
+            },
+            "compacted_sand_and_gravels_ninety": {
+                "embedment_sliding_resistance_factor": 2,
+                "effective_angle_shearing_resistance": 38
+            },
+        },
+        EmbedmentClass.S_FOUR: {
+            "friction_angle_reduction": 0.75,
+            "uncompacted_process_gravels": {
+                "embedment_sliding_resistance_factor": None,
+                "effective_angle_shearing_resistance": None
+            },
+            "compacted_sand_and_gravels_eighty_five": {      
+                "embedment_sliding_resistance_factor": 2,
+                "effective_angle_shearing_resistance": 33
+            },
+            "compacted_sand_and_gravels_ninety": {
+                "embedment_sliding_resistance_factor": 2,
+                "effective_angle_shearing_resistance": 34
+            },
+        },
+    },
+    EmbedmentCategory.CLAY:
+    {
+        EmbedmentClass.S_FIVE: {
+            "representative_adhesion": {
+                "soft_clay": 20,
+                "firm_stiff_clay": 30
+            },
+            "compacted_clays_eighty_five" : {
+                "embedment_sliding_resistance_factor": 4,
+                "adhesion_reduction_factor": 0.5
+            },
+            "compacted_clays_ninety" : {
+                "embedment_sliding_resistance_factor": 3.5,
+                "adhesion_reduction_factor": 0.7
+            },
+        }
+    }
+}
+
 # # --- Particle size ranges in mm: not used as of now ---
 # PARTICLE_SIZE_RANGES = {
 #     SoilType.BOULDER: (200, None),  # > 200 mm

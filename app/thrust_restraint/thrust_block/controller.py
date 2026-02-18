@@ -4,7 +4,6 @@ from app.civeng1.soils.soil_mechanics import SoilType, SoilConsistency, SoilCate
 from app.civeng1.structures.concrete import create_thrust_block, ThrustBlock
 import base64
 from pathlib import Path
-from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Font, Alignment
 from pathlib import Path
@@ -322,7 +321,7 @@ class Parametrization(vkt.Parametrization):
     block_section.lb_2 = vkt.LineBreak()
     block_section.download_pdf = vkt.DownloadButton("Export to Excel", method="export_to_excel", flex=24)
 
-class Controller(vkt.Controller):
+class ThrustBlockController(vkt.Controller):
     parametrization = Parametrization(width=40)
 
     def render_workflow_html(self, params):
@@ -383,7 +382,7 @@ class Controller(vkt.Controller):
     @vkt.WebView("Thrust Block Analysis Report")
     def analyze_tb(self, params, **kwargs):
 
-        image_path = Path(__file__).parent / "assets" / "Arcadis_logo.png"
+        image_path = Path(__file__).parent.parent / "assets" / "Arcadis_logo.png"
         with open(image_path, "rb") as img_file:
             img_base64 = base64.b64encode(img_file.read()).decode()
 

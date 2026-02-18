@@ -1,7 +1,7 @@
 import viktor as vkt 
 
 
-class Controller(vkt.Controller):
-    label = 'My Folder'
-    children = ['MyEntityType']
+class ThrustRestraintController(vkt.Controller):
+    label = 'Thrust Restraint'
+    children = ['ThrustBlock', "AnchorBlock"] #'ThrustRestrainedPipe',
     show_children_as = 'Table'

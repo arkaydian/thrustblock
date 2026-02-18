@@ -1,4 +1,4 @@
 app_type = "tree"
 python_version = "3.13"
 registered_name = "thrust-block-calculator"
-assets_path = "app/my_entity_type/assets"
+assets_path = "app/thrust_restraint/assets"

@@ -178,8 +178,8 @@ class WeldedPePipe():
                 "label": "Length of PE pipeline",
                 "output": self.length,
                 "si_unit": "m",
-                "formula_html": f"P = {self.length} m",
-                "formula_xls": "P",
+                "formula_html": f"L<sub>0</sub> = {self.length} m",
+                "formula_xls": "L",
                 "reference": "Section 2.3"
             },
             {

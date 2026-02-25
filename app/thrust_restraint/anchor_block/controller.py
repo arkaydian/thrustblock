@@ -12,8 +12,7 @@ from pathlib import Path
 fitting_list = fittings.FITTING_LABELS
 
 pipe_material_list: list = [pm.value for pm in pipes.PipeMaterial]
-coarse_embedment_list: list = [ec.label_capitalized for ec in EmbedmentClass if ec.category == EmbedmentCategory.COARSE]
-fine_embedment_list: list = [ec.label for ec in EmbedmentClass if ec.category == EmbedmentCategory.COARSE]
+coarse_embedment_list: list = [ec.label_capitalized for ec in EmbedmentClass]
 soil_list: list = [st.label for st in SoilType]
 soil_category: list = [sc for sc in SoilCategory]
 coarse_consistency: list = [cc.label for cc in SoilConsistency if cc.category ==  SoilCategory.COARSE]
@@ -145,6 +144,22 @@ def min_active_soil_displacement_factor(params, **kwargs):
     
 #--- visibility conditions ---
 
+s_one_compaction = vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S1")
+
+coarse_compaction = vkt.Or(
+    vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S2"),
+    vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S3"),
+    vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S4"),
+)
+
+clay_compaction = vkt.Or(
+    vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S5")
+)
+
+adhesion = vkt.Or(
+    vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S5")
+)
+
 coarse_soil_consistency = vkt.Or(
     vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Gravel"),
     vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Sand"),
@@ -187,9 +202,10 @@ class Parametrization(vkt.Parametrization):
     embedment_section = vkt.Section("Embedment Material Parameters", initially_expanded=True)
     embedment_section.embedment_class = vkt.OptionField("Embedment Class", flex=25, options=coarse_embedment_list, default="S3") 
     embedment_section.ground_water_level = vkt.NumberField("Ground Water Level (m)", flex=18, default=0.8)
-    embedment_section.coarse_compaction_class = vkt.OptionField("Compaction Class", flex=25, options=["Uncompacted processed gravels", "Compacted sands and gravels (85%)", "Compacted sands and gravels (90%)"], default="Compacted sands and gravels (85%)")
-    embedment_section.adhesion =  vkt.OptionField("Adhesion", flex=25, options=["Soft Clay", "Firm or Stiff Clay"], default="Firm or Stiff Clay") 
-    embedment_section.fine_compaction_class = vkt.OptionField("Compaction Class", flex=25, options=["Compacted clays (85%)", "Compacted clays (90%)"], default="Compacted clays (85%)") 
+    embedment_section.coarse_compaction_class = vkt.OptionField("Compaction Class", flex=25, options=["Compacted sands and gravels (85%)", "Compacted sands and gravels (90%)"], default="Compacted sands and gravels (85%)", visible = coarse_compaction)
+    embedment_section.s_one_compaction_class = vkt.OptionField("Compaction Class", flex=25, options=["Uncompacted processed gravels"], default="Uncompacted processed gravels", visible = s_one_compaction)
+    embedment_section.adhesion =  vkt.OptionField("Adhesion", flex=25, options=["Soft Clay", "Firm or Stiff Clay"], default="Firm or Stiff Clay", visible=adhesion) 
+    embedment_section.fine_compaction_class = vkt.OptionField("Compaction Class", flex=25, options=["Compacted clays (85%)", "Compacted clays (90%)"], default="Compacted clays (85%)", visible=clay_compaction) 
     
     # backfill soil params
     backfill_section = vkt.Section("Backfill Parameters", initially_expanded=True)

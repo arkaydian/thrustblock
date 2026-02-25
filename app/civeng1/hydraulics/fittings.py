@@ -91,6 +91,18 @@ class Fitting(ABC):
     @property
     def report_pipe_dimensions(self) -> List[EngRes]:
         raise NotImplementedError("Subclass must implement this `report_dimensions`")
+    
+    @property
+    def thrust_pass_through_check(self) -> bool:
+        if self.block_resistance > self.thrust_force_resultant:
+            return True
+        return False
+    
+    @property
+    def overturning_check(self) -> bool:
+        if self.safety_factor_against_overturning > 1.5:
+            return True
+        return False
 
     @property
     def thrust_block_standard_workflow(self) -> List[EngRes]:
@@ -368,6 +380,18 @@ class VerticalUpturnBend(Fitting):
                 else f"{self.vertical_block_resistance_force} kN < {self.thrust_force_vertical:.2f} kN Fail vertical ground bearing resistance"
     
     @property
+    def thrust_force_check(self) -> bool:
+        if self.vertical_block_resistance_force > self.thrust_force_vertical:
+            return True
+        return False
+    
+    @property
+    def thrust_pass_through_check(self) -> bool:
+        if self.block_resistance > self.thrust_force_horizontal:
+            return True
+        return False
+
+    @property
     def fitting_workflow_res(self) -> List[EngRes]:
         thrust_pass_through_check = f"<span style='color: green'><b>{self.block_resistance:.2f} kN > {self.thrust_force_horizontal:.2f} kN, Passes thrust resistance</b></span>" \
         if self.block_resistance > self.thrust_force_horizontal else \
@@ -575,6 +599,18 @@ class VerticalDownturnBend(Fitting):
     @property
     def uplift_factor_of_safety(self) -> float:
         return self.effective_weight_thrust_block / self.thrust_force_vertical
+    
+    @property
+    def thrust_pass_through_check(self) -> bool:
+        if self.block_resistance > self.thrust_force_horizontal:
+            return True
+        return False
+    
+    @property
+    def uplift_safety_check(self) -> bool:
+        if self.uplift_factor_of_safety > 1.5:
+            return True
+        return False
     
     @property
     def thrust_block_standard_workflow(self) -> List[EngRes]:
@@ -1289,6 +1325,12 @@ class FlangedMetallicPipe(Fitting):
     @property
     def over_turning_moment(self) -> float:
         return self.embedment_type.contraction_design_force * self.overturning_level_arm
+    
+    @property
+    def thrust_pass_through_check(self) -> bool:
+            if self.block_resistance > self.embedment_type.contraction_design_force:
+                return True
+            return False
 
     @property
     def fitting_workflow_res(self) -> List[EngRes]:

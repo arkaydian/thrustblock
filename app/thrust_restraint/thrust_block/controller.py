@@ -352,7 +352,7 @@ class ThrustBlockController(vkt.Controller):
     def export_to_excel(self, params, **kwargs):
         """Export the dimensions to an Excel file."""
         # Create a new workbook and select the active sheet
-        template_path =  Path(__file__).parent / 'arcadis_calculation_sheet_template.xlsx'
+        template_path =  Path(__file__).parent.parent / 'arcadis_calculation_sheet_template.xlsx'
         wb = load_workbook(template_path)
         ws = wb["Thrust Block 1"]
 

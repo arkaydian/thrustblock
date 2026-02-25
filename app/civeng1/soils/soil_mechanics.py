@@ -698,7 +698,7 @@ class CoarseEmbedment(Embedment):
                 "si_unit": "kN/m",
                 "formula_html": f" F<sub>F</sub> = ϕ<sub>m</sub> &times; 2 &times; D<sub>o</sub> &times; (Y<sub>s</sub> &minus; \
                     (C<sub>GW</sub> &times; Y<sub>w</sub>)) &times; (Z<sub>0</sub> + 0.3 &times; D<sub>o</sub>) &times; \
-                        tan(f<sub>ue</sub> &times; &phi;<sup>&prime;</sup>) &divide; DF<sub>F</sub> = <b>{self.sliding_resistance_force:.2f}</b> ",
+                        tan(f<sub>ue</sub> &times; &phi;<sup>&prime;</sup>) &divide; DF<sub>F</sub> = <b>{self.sliding_resistance_force:.2f} kN/m</b>",
                 "formula_xls": "Ff = Qm * 2 * Do * (Ys - (CGW * Yw)) * (Z0 + 0.3 * Do) * tan(fue * φ′) / DFF",
                 "reference": "Section 3.7.3"
             },
@@ -706,7 +706,7 @@ class CoarseEmbedment(Embedment):
                 "label": "Embedment sliding resistance force",
                 "output": self.sliding_resistance_force,
                 "si_unit": "kN/m",
-                "formula_html": f" F<sub>S</sub> = F<sub>F</sub> = <b>{self.sliding_resistance_force:.2f}</b> ",
+                "formula_html": f" F<sub>S</sub> = F<sub>F</sub> = <b>{self.sliding_resistance_force:.2f} kN/m</b> ",
                 "formula_xls": "F_S",
                 "reference": "Section 4.1.2.3 Step 4"
             },
@@ -722,17 +722,16 @@ class CoarseEmbedment(Embedment):
                 "label": "Pipeline contraction design force",
                 "output": self.contraction_design_force,
                 "si_unit": "kN",
-                "formula_html": f"F<sub>AS</sub> = F<sub>p</sub> + F<sub>T</sub> - (2 * E * A<sub>w</sub> * ALM * L<sub>o</sub> / L<sub>s</sub>) \
-                    - (L<sub>o</sub> * F<sub>s</sub> / 4) = <b>{self.contraction_design_force:.2f}</b>" if self.long_short_pipe_transition_length > self.pipe.length \
-                    else f"<p>F<sub>AS</sub> = F<sub>p</sub> + F<sub>T</sub> - (2 * E * A<sub>w</sub> * ALM * L<sub>o</sub> / L<sub>s</sub>) - (L<sub>o</sub> * F<sub>s</sub> ÷ 4) = <b>{self.contraction_design_force:.2f}</b></p>",
+                "formula_html": f"F<sub>A</sub> = F<sub>p</sub> + F<sub>T</sub> - √(2 x E x A<sub>w</sub>  x ΔL<sub>M</sub> / L<sub>s</sub>) = <b>{self.contraction_design_force:.2f} kN</b>" if self.long_short_pipe_transition_length < self.pipe.length \
+                    else f"<p>F<sub>AS</sub> = F<sub>p</sub> + F<sub>T</sub> - (2 x E x A<sub>w</sub> x ΔL_M x L<sub>o</sub> / L<sub>s</sub>) - (L<sub>o</sub> x F<sub>s</sub> ÷ 4) = <b>{self.contraction_design_force:.2f} kN</b></p>",
                 "formula_xls": "F_S",
-                "reference": "Section 4.1.2.3 Step 5a" if self.long_short_pipe_transition_length else "Section 4.1.2.3 Step 5b"
+                "reference": "Section 4.1.2.3 Step 5a" if self.long_short_pipe_transition_length < self.pipe.length else "Section 4.1.2.3 Step 5b"
             },
             {
                 "label": "Pipeline contraction design force",
                 "output": self.contraction_design_force,
                 "si_unit": "kN/m",
-                "formula_html": f"F<sub>D</sub> = <b>{self.contraction_design_force:.2f}</b>",
+                "formula_html": f"F<sub>D</sub> = <b>{self.contraction_design_force:.2f} kN</b>",
                 "formula_xls": "F_D",
                 "reference": "Section 4.1.2.3 Step"
             },
@@ -904,13 +903,32 @@ def register_embedment(*embedment_class: EmbedmentClass):
         return builder
     return decorator
 
-@register_embedment(EmbedmentClass.S_ONE, EmbedmentClass.S_TWO, EmbedmentClass.S_THREE, EmbedmentClass.S_FOUR)
+@register_embedment(EmbedmentClass.S_ONE)
+def build_s_one_embedment(
+    *,    
+    ground_water_level: float,
+    pipe: WeldedPePipe,
+    backfill_soil: Soil,
+    compaction_class: str,
+    embedment_class: EmbedmentClass,
+    ) -> Embedment:
+
+   return CoarseEmbedment(
+        ground_water_level = ground_water_level,
+        pipe = pipe,
+        backfill_soil = backfill_soil,
+        compaction_class = "Uncompacted processed gravels",
+        embedment_class = embedment_class,
+    )
+
+
+@register_embedment(EmbedmentClass.S_TWO, EmbedmentClass.S_THREE, EmbedmentClass.S_FOUR)
 def build_coarse_embedment(
     *,    
     ground_water_level: float,
     pipe: WeldedPePipe,
     backfill_soil: Soil,
-    compaction_class: Literal["Uncompacted processed gravels", "Compacted sands and gravels (85%)", "Compacted sands and gravels (90%)"],
+    compaction_class: Literal["Compacted sands and gravels (85%)", "Compacted sands and gravels (90%)"],
     embedment_class: EmbedmentClass,
     ) -> Embedment:
 
@@ -959,9 +977,13 @@ def create_embedment(params: Any) -> Embedment:
         backfill_soil = backfill_soil,
         embedment_class = embedment_class
     )
+    s_one_compaction_class = e.s_one_compaction_class
     coarse_compaction_class = e.coarse_compaction_class
     fine_compaction_class = e.fine_compaction_class
     adhesion = e.adhesion
+
+    if builder is build_s_one_embedment:
+        return builder(**common_embedment, compaction_class=s_one_compaction_class)
 
     if builder is build_coarse_embedment:
         return builder(**common_embedment, compaction_class=coarse_compaction_class)

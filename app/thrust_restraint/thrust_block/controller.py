@@ -149,9 +149,9 @@ pipe_outside_param = vkt.Or(
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Blank End"),
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Closed Valve"),
 )
-bend_direction = vkt.Or(
-    vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Vertical Bend"),
-)
+# bend_direction = vkt.Or(
+#     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Vertical Bend"),
+# )
 pipe_outside_larger_end = vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Taper Thrust")
 pipe_outside_smaller_end = vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Taper Thrust")
 pipe_diameter_main = vkt.Or(
@@ -267,7 +267,8 @@ class Parametrization(vkt.Parametrization):
     fitting_section.outside_diameter_main = vkt.NumberField("Pipe outside diameter – main (m)", flex=40, visible=pipe_diameter_main, default=0.43)
     fitting_section.outside_diameter_branch = vkt.NumberField("Branch Pipe outside diameter (m)", flex=40, visible=pipe_diameter_branch, default=0.63)
     fitting_section.angle = vkt.NumberField("Bend Radius (°)", flex=20, visible=bend_angle, default=45)
-    fitting_section.turn_direction = vkt.OptionField("Turn Direction", options=["upturn", "downturn"], flex=20, visible=bend_direction, default="downturn")
+    # fitting_section.turn_direction = vkt.OptionField("Turn Direction", options=["upturn", "downturn"], flex=20, visible=bend_direction, default="downturn")
+    fitting_section.chainage = vkt.NumberField("Chainage", flex=40)
 
     # soil params 1
     soil_section = vkt.Section("Soil Type Parameters", initially_expanded=True)

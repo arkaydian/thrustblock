@@ -140,6 +140,71 @@ def min_active_soil_displacement_factor(params, **kwargs):
         fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_sliding_resistance_factor"][0]
         return fine_strength
     
+def max_backfill_soil_params(params, **kwargs):
+    soil_category = get_soil_category_by_label(params.backfill_section.soil_type)
+    if soil_category == SoilCategory.COARSE:
+        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.coarse_soil_consistency)
+        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["friction_angle"][1]
+        return coarse_angle
+    elif soil_category == SoilCategory.FINE:
+        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.fine_soil_consistency)
+        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["undrained_shear_strength"][1]
+        return fine_strength
+    
+def min_backfill_soil_params(params, **kwargs):
+    soil_category = get_soil_category_by_label(params.backfill_section.soil_type)
+    if soil_category == SoilCategory.COARSE:
+        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.coarse_soil_consistency)
+        return SOIL_PROPERTIES[soil_category][soil_consistency]["friction_angle"][0]
+    elif soil_category == SoilCategory.FINE:
+        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.fine_soil_consistency)
+        return SOIL_PROPERTIES[soil_category][soil_consistency]["undrained_shear_strength"][0]
+
+
+def max_passive_backfill_soil_displacement_factor(params, **kwargs):
+    soil_category = get_soil_category_by_label(params.backfill_section.soil_type)
+    if soil_category == SoilCategory.COARSE:
+        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.coarse_soil_consistency)
+        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_passive_resistance_factor"][1]
+        return coarse_angle
+    elif soil_category == SoilCategory.FINE:
+        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.fine_soil_consistency)
+        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_passive_resistance_factor"][1]
+        return fine_strength
+    
+def min_passive_backfill_soil_displacement_factor(params, **kwargs):
+    soil_category = get_soil_category_by_label(params.backfill_section.soil_type)
+    if soil_category == SoilCategory.COARSE:
+        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.coarse_soil_consistency)
+        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_sliding_resistance_factor"][0]
+        return coarse_angle
+    elif soil_category == SoilCategory.FINE:
+        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.fine_soil_consistency)
+        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_sliding_resistance_factor"][0]
+        return fine_strength
+    
+def max_active_backfill_soil_displacement_factor(params, **kwargs):
+    soil_category = get_soil_category_by_label(params.backfill_section.soil_type)
+    if soil_category == SoilCategory.COARSE:
+        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.coarse_soil_consistency)
+        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_passive_resistance_factor"][1]
+        return coarse_angle
+    elif soil_category == SoilCategory.FINE:
+        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.fine_soil_consistency)
+        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_passive_resistance_factor"][1]
+        return fine_strength
+    
+def min_active_backfill_soil_displacement_factor(params, **kwargs):
+    soil_category = get_soil_category_by_label(params.backfill_section.soil_type)
+    if soil_category == SoilCategory.COARSE:
+        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.coarse_soil_consistency)
+        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_sliding_resistance_factor"][0]
+        return coarse_angle
+    elif soil_category == SoilCategory.FINE:
+        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.fine_soil_consistency)
+        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_sliding_resistance_factor"][0]
+        return fine_strength
+    
 #--- end refactor ---
     
 #--- visibility conditions ---
@@ -160,10 +225,37 @@ adhesion = vkt.Or(
     vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S5")
 )
 
+# --- Backfill visibility conditions
+
+coarse_backfill_soil_consistency = vkt.Or(
+    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Gravel"),
+    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Sand"),
+)
+
+fine_backfill_soil_consistency = vkt.Or(
+    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Silt"),
+    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Clay"),
+)
+
+backfill_undrained_shear_strength = vkt.Or(
+    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Silt"),
+    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Clay"),
+)
+
+backfill_friction_angle = vkt.Or(
+    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Gravel"),
+    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Sand"),
+)
+
+backfill_ground_water_level = vkt.IsEqual(vkt.Lookup("backfill_section.ground_condition"), "Below Water")
+
+# --- Native soil visibility
+
 coarse_soil_consistency = vkt.Or(
     vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Gravel"),
     vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Sand"),
 )
+
 fine_soil_consistency = vkt.Or(
     vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Silt"),
     vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Clay"),
@@ -181,6 +273,7 @@ friction_angle = vkt.Or(
 
 ground_water_level = vkt.IsEqual(vkt.Lookup("soil_section.ground_condition"), "Below Water")
 
+
 #--- ui logic ---
 
 class Parametrization(vkt.Parametrization):
@@ -197,6 +290,7 @@ class Parametrization(vkt.Parametrization):
     pipe_section.temperature_reduction = vkt.NumberField('Temperature reduction of pipe material', flex=30, default=10)
     pipe_section.elastic_modulus= vkt.NumberField('Elastic modulus', flex=30, default=712)
     pipe_section.allowable_contraction_movement = vkt.NumberField('Allowable contraction movement', flex=30, default=0.005)
+    pipe_section.chainage = vkt.NumberField("Chainage", flex=40)
 
     # embedment params
     embedment_section = vkt.Section("Embedment Material Parameters", initially_expanded=True)
@@ -210,17 +304,17 @@ class Parametrization(vkt.Parametrization):
     # backfill soil params
     backfill_section = vkt.Section("Backfill Parameters", initially_expanded=True)
     backfill_section.soil_type = vkt.OptionField("Soil Type", flex=18, options=soil_list, default="Gravel")
-    backfill_section.coarse_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=coarse_consistency, visible=coarse_soil_consistency, default="Medium Dense")
-    backfill_section.fine_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=fine_consistency, visible=fine_soil_consistency, default="Firm")
-    backfill_section.friction_angle = vkt.NumberField("Friction Angle", flex=25, visible=friction_angle, default=33, step=0.1, max=max_soil_params, min=min_soil_params)
-    backfill_section.undrained_shear_strength = vkt.NumberField("Undrained Shear Strength", flex=25, visible=undrained_shear_strength, default=50, step=0.1, max=max_soil_params, min=min_soil_params)
+    backfill_section.coarse_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=coarse_consistency, visible=coarse_backfill_soil_consistency, default="Medium Dense")
+    backfill_section.fine_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=fine_consistency, visible=fine_backfill_soil_consistency, default="Firm")
+    backfill_section.friction_angle = vkt.NumberField("Friction Angle", flex=25, visible=backfill_friction_angle, default=33, step=0.1, max=max_backfill_soil_params, min=min_backfill_soil_params)
+    backfill_section.undrained_shear_strength = vkt.NumberField("Undrained Shear Strength", flex=25, visible=backfill_undrained_shear_strength, default=50, step=0.1, max=max_soil_params, min=min_soil_params)
     backfill_section.lb = vkt.LineBreak()
-    backfill_section.soil_passive_factor = vkt.NumberField("DFp", flex=10, default=3, max=max_passive_soil_displacement_factor, min=min_passive_soil_displacement_factor, description="Passive resistance displacement limitation factor - Table 3.6")
-    backfill_section.soil_sliding_factor = vkt.NumberField("DFs", flex=10, default=2.25, max=max_active_soil_displacement_factor, min=min_active_soil_displacement_factor, description="Sliding resistance displacement limitation factor - Table 3.6")
+    backfill_section.soil_passive_factor = vkt.NumberField("DFp", flex=10, default=3, max=max_passive_backfill_soil_displacement_factor, min=min_passive_backfill_soil_displacement_factor, description="Passive resistance displacement limitation factor - Table 3.6")
+    backfill_section.soil_sliding_factor = vkt.NumberField("DFs", flex=10, default=2.25, max=max_active_backfill_soil_displacement_factor, min=min_active_backfill_soil_displacement_factor, description="Sliding resistance displacement limitation factor - Table 3.6")
     # soil params 2
     backfill_section.lb_2 = vkt.LineBreak()
     backfill_section.ground_condition = vkt.OptionField("Ground Condition", flex=18, options=["Above Water", "Below Water"], default="Below Water")
-    backfill_section.groundwater_level = vkt.NumberField("Ground level depth (m)", flex=25, visible=ground_water_level, default=0.8)
+    backfill_section.groundwater_level = vkt.NumberField("Ground level depth (m)", flex=25, visible=backfill_ground_water_level, default=0.8)
 
     # soil params 1
     soil_section = vkt.Section("Native Soil Parameters", initially_expanded=True)

@@ -141,7 +141,7 @@ class WeldedPePipe():
     
     @property
     def fixed_end_contraction_force(self) -> float:
-        return self.liquid_pressure_long_longitudinal_force + self.liquid_pressure_long_longitudinal_force
+        return self.temperature_longitudinal_force + self.liquid_pressure_long_longitudinal_force
     
     @property
     def pipe_material_factor(self) -> float:
@@ -154,7 +154,7 @@ class WeldedPePipe():
                 "label": "Pipe outside diameter",
                 "output": self.outside_diameter,
                 "si_unit": "m",
-                "formula_html": f"D<sub>O</sub> = {self.outside_diameter} m",
+                "formula_html": f"D_O = {self.outside_diameter} m",
                 "formula_xls": "D_O",
                 "reference": " - "
             },
@@ -170,7 +170,7 @@ class WeldedPePipe():
                 "label": "Pipe wall thickness",
                 "output": self.pipe_wall_thickness,
                 "si_unit": "m",
-                "formula_html": f"t = D<sub>O</sub> ÷ SDR = <b>{self.pipe_wall_thickness:.2f} m</b>",
+                "formula_html": f"t = D_O ÷ SDR = {self.pipe_wall_thickness:.2f} m",
                 "formula_xls": "t = D_O / SDR",
                 "reference": "Section 4.1.2.2"
             },
@@ -178,15 +178,15 @@ class WeldedPePipe():
                 "label": "Length of PE pipeline",
                 "output": self.length,
                 "si_unit": "m",
-                "formula_html": f"L<sub>0</sub> = {self.length} m",
-                "formula_xls": "L",
+                "formula_html": f"L_0 = {self.length} m",
+                "formula_xls": "L_0",
                 "reference": "Section 2.3"
             },
             {
                 "label": "Pressure fixed by the designer",
                 "output": self.maximum_design_pressure,
                 "si_unit": "kN/m2",
-                "formula_html": f"P = {self.maximum_design_pressure} kN/m<sup>2</sup>",
+                "formula_html": f"P = {self.maximum_design_pressure} kN/m²",
                 "formula_xls": "P",
                 "reference": "Section 2.3"
             },
@@ -194,7 +194,7 @@ class WeldedPePipe():
                 "label": "Depth to crown of pipe",
                 "output": self.crown_depth,
                 "si_unit": "m",
-                "formula_html": f"Z<sub>O</sub> = {self.crown_depth} m",
+                "formula_html": f"Z_O = {self.crown_depth} m",
                 "formula_xls": "Z_O",
                 "reference": " - "
             },
@@ -202,7 +202,7 @@ class WeldedPePipe():
                 "label": "Allowable contraction movement",
                 "output": self.allowable_contraction_movement,
                 "si_unit": "m",
-                "formula_html": f"ΔL<sub>M</sub> = {self.allowable_contraction_movement} m",
+                "formula_html": f"ΔL_M = {self.allowable_contraction_movement} m",
                 "formula_xls": "ΔL_m",
                 "reference": "Section 4.1.2.2"
             },
@@ -242,7 +242,7 @@ class WeldedPePipe():
                 "label": "Cross-Sectiontional area of the pipe wall",
                 "output": self.cross_sectional_area,
                 "si_unit": "m2",
-                "formula_html": f"A<sub>W</sub> =  π  x (D<sub>O</sub> - t) x t = <b>{self.cross_sectional_area:.4f} m<sup>2</sup></b>",
+                "formula_html": f"A_W = π × (D_O − t) × t = {self.cross_sectional_area:.4f} m²",
                 "formula_xls": "A_W = π * (D_O - t) * t",
                 "reference": "Section 4.1.2.3"
             },
@@ -250,7 +250,7 @@ class WeldedPePipe():
                 "label": "Hoop stress",
                 "output": self.hoop_stress,
                 "si_unit": "kN/m2",
-                "formula_html": f"σ<sub>m</sub> =  (P  x (D<sub>O</sub> - t)) ÷ (2 x t) = <b>{self.hoop_stress:.2f} kN/m<sup>2</sup></b>",
+                "formula_html": f"σ_m = (P × (D_O − t)) ÷ (2 × t) = {self.hoop_stress:.2f} kN/m²",
                 "formula_xls": "A_W = (P * (D_O - t)) / (2 * t)",
                 "reference": "Section 4.1.2.3"
             },
@@ -258,7 +258,7 @@ class WeldedPePipe():
                 "label": "Longitudinal stress due to liquid pressure",
                 "output": self.liquid_pressure_longitudinal_stress,
                 "si_unit": "kN/m2",
-                "formula_html": f"σ<sub>P</sub> = ν x σ<sub>M</sub> = <b>{self.liquid_pressure_longitudinal_stress:.2f} kN/m<sup>2</sup></b>",
+                "formula_html": f"σ_P = ν × σ_M = {self.liquid_pressure_longitudinal_stress:.2f} kN/m²",
                 "formula_xls": "σ_P = ν * σ_M",
                 "reference": "Section 4.1.2.3"
             },
@@ -266,15 +266,15 @@ class WeldedPePipe():
                 "label": "Longidudinal force due to liquid pressure",
                 "output": self.liquid_pressure_long_longitudinal_force,
                 "si_unit": "kN",
-                "formula_html": f"F<sub>P</sub> = σ<sub>P</sub> x A<sub>W</sub> = <b>{self.liquid_pressure_long_longitudinal_force:.2f} kN</b>",
-                "formula_xls": "F_P = σ * A_W",
+                "formula_html": f"F_P = σ_P × A_W = {self.liquid_pressure_long_longitudinal_force:.2f} kN",
+                "formula_xls": "F_P = σ_P * A_W",
                 "reference": "Section 4.1.2.3"
             },
             {
                 "label": "Longitudinal strain due to temperature",
                 "output": self.temperature_longitudinal_strain,
                 "si_unit": "",
-                "formula_html": f"ε<sub>t</sub> = ΔT x α = <b>{self.temperature_longitudinal_strain}</b>",
+                "formula_html": f"ε_t = ΔT × α = {self.temperature_longitudinal_strain}",
                 "formula_xls": "ε_t = ΔT * α",
                 "reference": "Section 4.1.2.3"
             },
@@ -282,7 +282,7 @@ class WeldedPePipe():
                 "label": "Longitudinal stress due to temperature",
                 "output": self.temperature_longitudinal_stress,
                 "si_unit": "kN/m2",
-                "formula_html": f"σ<sub>T</sub> = ε<sub>t</sub> x E = <b>{self.temperature_longitudinal_stress:.2f} kN/m<sup>2</sup></b>",
+                "formula_html": f"σ_T = ε_t × E = {self.temperature_longitudinal_stress:.2f} kN/m²",
                 "formula_xls": "σ_T = ε_t * E",
                 "reference": "Section 4.1.2.3"
             },
@@ -290,15 +290,15 @@ class WeldedPePipe():
                 "label": "Longitudinal force due to temperature",
                 "output": self.temperature_longitudinal_force,
                 "si_unit": "kN",
-                "formula_html": f"F<sub>T</sub> = σ<sub>T</sub> x A<sub>W</sub> = <b>{self.temperature_longitudinal_force:.2f} kN</b>",
+                "formula_html": f"F_T = σ_T × A_W = {self.temperature_longitudinal_force:.2f} kN",
                 "formula_xls": "F_T = σ_T * A_W",
                 "reference": "Section 4.1.2.3"
             },
             {
                 "label": "Fixed end contraction force",
-                "output": self.temperature_longitudinal_force,
+                "output": self.fixed_end_contraction_force,
                 "si_unit": "kN",
-                "formula_html": f"F<sub>C</sub> = F<sub>P</sub> x F<sub>T</sub> = <b>{self.temperature_longitudinal_force:.2f} kN</b>",
+                "formula_html": f"F_C = F_P × F_T = {self.fixed_end_contraction_force:.2f} kN",
                 "formula_xls": "F_C = F_P * F_T",
                 "reference": "Section 4.1.2.3 Step 2"
             },

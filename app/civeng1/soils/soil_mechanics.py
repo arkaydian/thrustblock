@@ -193,8 +193,6 @@ class Soil(ABC):
         """
         Returns buoyancy coefficient in accordance with Section 3.5
         """
-        # if isinstance(self.fitting, VerticalBend) and self.fitting.turn_direction == "downturn":
-        #     return 1
         if self.thrust_block is None:
             raise ValueError("Thrust block is not defined.")
         return 1 - (self.ground_water_level / self.thrust_block.depth)
@@ -334,7 +332,7 @@ class CoarseSoil(Soil):
                 "label": "Passive earth pressure coefficient",
                 "output": self.coefficient_passive_earth_pressure,
                 "si_unit": "",
-                "formula_html": f"K<sub>p</sub> = (tan(45 + Φ'/2))<sup>2</sup> = <b>{self.coefficient_passive_earth_pressure:.2f}</b>",
+                "formula_html": f"Kₚ = (tan(45° + Φ′⁄2))² = {self.coefficient_passive_earth_pressure:.2f}",
                 "formula_xls": "K_p = (tan(45 + Φ'/2))^2",
                 "reference": "Section 3.6.1"
             },
@@ -342,7 +340,7 @@ class CoarseSoil(Soil):
                 "label": "Active earth pressure coefficient",
                 "output": self.coefficient_active_earth_pressure,
                 "si_unit": "",
-                "formula_html": f"K<sub>a</sub> = (tan(45 - Φ'/2))<sup>2</sup> = <b>{self.coefficient_active_earth_pressure:.2f}</b>",
+                "formula_html": f"Kₐ = (tan(45° − Φ′⁄2))² = {self.coefficient_active_earth_pressure:.2f}",
                 "formula_xls": "K_a = (tan(45 - Φ'/2))^2",
                 "reference": "Section 3.6.1"
             },
@@ -350,7 +348,7 @@ class CoarseSoil(Soil):
                 "label": "Passive resistance displacement limitation factor",
                 "output": self.soil_passive_factor,
                 "si_unit": "",
-                "formula_html": f"DF<sub>p</sub> = {self.soil_passive_factor}",
+                "formula_html": f"DFₚ= {self.soil_passive_factor}",
                 "formula_xls": "DF_p",
                 "reference": "Table 3.6"
             },
@@ -358,7 +356,7 @@ class CoarseSoil(Soil):
                 "label": "Sliding resistance displacement limitation factor",
                 "output": self.soil_sliding_factor,
                 "si_unit": "",
-                "formula_html": f"DF<sub>s</sub> = {self.soil_sliding_factor}",
+                "formula_html": f"DFₛ = {self.soil_sliding_factor}",
                 "formula_xls": "DF_s",
                 "reference": "Table 3.8"
             },
@@ -366,7 +364,7 @@ class CoarseSoil(Soil):
                 "label": "Net passive soil pressure",
                 "output": self.net_unit_area_soil_pressure,
                 "si_unit": "kN/m2",
-                "formula_html": f"σ<sub>pa</sub> = (γ<sub>s</sub> - (C<sub>GW</sub> x γ<sub>W</sub>)) x (Z<sub>b</sub> - H/2) x (K<sub>p</sub> - K<sub>a</sub>) ÷ DF<sub>p</sub> = <b>{self.net_unit_area_soil_pressure:.2f} kN/m2</b>",
+                "formula_html": f"σₚₐ = (γₛ − (C_GW × γ_W)) × (Z_b − H⁄2) × (K_p − K_a) ÷ DFₚ = {self.net_unit_area_soil_pressure:.2f} kN/m2",
                 "formula_xls": "σ_pa = (γ_s – (C_GW - γ_W)) x (Z_b – H/2) x (K_p – K_a) ÷ DF_P",
                 "reference": "Section 3.6.1"
             },
@@ -374,23 +372,23 @@ class CoarseSoil(Soil):
                 "label": "Base sliding resistance",
                 "output": self.sliding_resistance_base(),
                 "si_unit": "kN/m2",
-                "formula_html": f"𝜏<sub>b</sub> = (γ<sub>s</sub> - (C<sub>GW</sub> x γ<sub>W</sub>)) x Z<sub>b</sub> x tan(Φ') ÷ DF<sub>s</sub> = <b>{self.sliding_resistance_base():.2f} kN/m2</b>",
-                "formula_xls": "𝜏_b = (γ_s – (C_GW - γ_W)) x (Z_b – H/2) x tan(Φ') ÷ DF_s",
+                "formula_html": f"τ_b = (γ_s − (C_GW × γ_W)) × Z_b × tan(Φ′) ÷ DF_s = {self.sliding_resistance_base():.2f} kN/m2",
+                "formula_xls": "τ_b = (γ_s – (C_GW - γ_W)) x (Z_b – H/2) x tan(Φ') ÷ DF_s",
                 "reference": "Section 3.7.1"
             },
             {
                 "label": "Side sliding resistance",
                 "output": self.sliding_resistance_side,
                 "si_unit": "kN/m2",
-                "formula_html": f"𝜏<sub>s</sub> = (γ<sub>s</sub> - (C<sub>GW</sub> x γ<sub>W</sub>)) x (Z<sub>b</sub> - H/2) x K<sub>a</sub>) x tan(Φ') ÷ DF<sub>s</sub> = <b>{self.sliding_resistance_side:.2f} kN/m2</b>",
-                "formula_xls": "𝜏_s = (γ_s – (C_GW - γ_W)) x (Z_b – H/2) x  K_a ÷ DF_s",
+                "formula_html": f"τₛ = (γₛ − (C_GW × γ_W)) × (Z_b − H⁄2) × Kₐ × tan(Φ′) ÷ DFₛ = {self.sliding_resistance_side:.2f} kN/m2",
+                "formula_xls": "τ_s = (γ_s – (C_GW - γ_W)) x (Z_b – H/2) x  K_a ÷ DF_s",
                 "reference": "Section 3.7.2"
             },
             {
                 "label": "Passive face area",
                 "output": self.area_passive_face,
                 "si_unit": "kN/m2",
-                "formula_html": f"A<sub>f</sub> = H x W = <b>{self.area_passive_face:.2f} m2</b>",
+                "formula_html": f"A_f = H × W = {self.area_passive_face:.2f} m2",
                 "formula_xls": "A_f = H x W",
                 "reference": " - "
             },
@@ -398,7 +396,7 @@ class CoarseSoil(Soil):
                 "label": "Base sliding area",
                 "output": self.area_base_sliding,
                 "si_unit": "m2",
-                "formula_html": f"A<sub>b</sub> = L x W = <b>{self.area_base_sliding:.2f} m2</b>",
+                "formula_html": f"A_b = L × W = {self.area_base_sliding:.2f} m2",
                 "formula_xls": "A_f = L x W",
                 "reference": " - "
             },
@@ -406,7 +404,7 @@ class CoarseSoil(Soil):
                 "label": "Sliding area per side",
                 "output": self.area_side_sliding,
                 "si_unit": "m2",
-                "formula_html": f"A<sub>s</sub> = L x W = <b>{self.area_side_sliding:.2f} m2</b>",
+                "formula_html": f"Aₛ = L × W = {self.area_side_sliding:.2f} m2",
                 "formula_xls": "A_f = H x L",
                 "reference": " - "
             },
@@ -476,7 +474,7 @@ class FineSoil(Soil):
                 "label": "Undrained shear strength",
                 "output": self.undrained_shear_strength,
                 "si_unit": "Cu",
-                "formula_html": f"C<sub>U</sub> = {self.undrained_shear_strength}",
+                "formula_html": f"Cᵤ = {self.undrained_shear_strength}",
                 "formula_xls": "C_u' = ",
                 "reference": "Table 3.2"
             },
@@ -484,7 +482,7 @@ class FineSoil(Soil):
                 "label": "Passive resistance displacement limitation factor",
                 "output": self.soil_passive_factor,
                 "si_unit": "",
-                "formula_html": f"DF<sub>p</sub> = {self.soil_passive_factor:.2f}",
+                "formula_html": f"DFₚ = {self.soil_passive_factor:.2f}",
                 "formula_xls": "DF_p",
                 "reference": "Table 3.6"
             },
@@ -492,7 +490,7 @@ class FineSoil(Soil):
                 "label": "Sliding resistance displacement limitation factor",
                 "output": self.soil_sliding_factor,
                 "si_unit": "",
-                "formula_html": f"DF<sub>s</sub> = {self.soil_sliding_factor}",
+                "formula_html": f"DFₛ = {self.soil_sliding_factor}",
                 "formula_xls": "DF_s",
                 "reference": "Table 3.8"
             },
@@ -500,7 +498,7 @@ class FineSoil(Soil):
                 "label": "Net passive soil pressure",
                 "output": self.net_unit_area_soil_pressure,
                 "si_unit": "kN/m2",
-                "formula_html": f"σ<sub>pa</sub> = 2 x C<sub>u</sub> ÷ DF<sub>p</sub> = <b>{self.net_unit_area_soil_pressure:.2f}</b> kN/m2",
+                "formula_html": f"σₚₐ = 2 × Cᵤ ÷ DFₚ = {self.net_unit_area_soil_pressure:.2f} kN/m2",
                 "formula_xls": "σ_pa = 2 x C_u ÷ DF_p",
                 "reference": "Section 3.6.1"
             },
@@ -508,31 +506,31 @@ class FineSoil(Soil):
                 "label": "Base sliding resistance",
                 "output": self.sliding_resistance_base(),
                 "si_unit": "kN/m2",
-                "formula_html": f"𝜏<sub>b</sub> = C<sub>u</sub> ÷ DF<sub>p</sub> = <b>{self.sliding_resistance_base():.2f} kN/m2</b>",
-                "formula_xls": "𝜏_b = (γ_s – (C_GW - γ_W)) x (Z_b – H/2) x tan(Φ') ÷ DF_s",
+                "formula_html": f"τ_b = Cᵤ ÷ DFₚ = {self.sliding_resistance_base():.2f} kN/m2",
+                "formula_xls": "τ_b = (γ_s – (C_GW - γ_W)) x (Z_b – H/2) x tan(Φ') ÷ DF_s",
                 "reference": "Section 3.7.1"
             },
             {
                 "label": "Passive face area",
                 "output": self.area_passive_face,
                 "si_unit": "kN/m2",
-                "formula_html": f"A<sub>f</sub> = H x W = <b>{self.area_passive_face:.2f}</b>",
-                "formula_xls": "A_f = H x W",
+                "formula_html": f"A_f = H × W = {self.area_passive_face:.2f}",
+                "formula_xls": "A_f = H * W",
                 "reference": ""
             },
             {
                 "label": "Base sliding area",
                 "output": self.area_base_sliding,
                 "si_unit": "m2",
-                "formula_html": f"A<sub>b</sub> = L x W = <b>{self.area_base_sliding:.2f}</b>",
-                "formula_xls": "A_f = L x W",
+                "formula_html": f"A_b = L × W = {self.area_base_sliding:.2f}",
+                "formula_xls": "A_f = L * W",
                 "reference": ""
             },
             {
                 "label": "Sliding area per side",
                 "output": self.area_side_sliding,
                 "si_unit": "m2",
-                "formula_html": f"A<sub>s</sub> = L x W = <b>{self.area_side_sliding:.2f}</b>",
+                "formula_html": f"Aₛ = L × W = {self.area_side_sliding:.2f}",
                 "formula_xls": "A_f = H x L",
                 "reference": ""
             },
@@ -564,7 +562,6 @@ class Embedment(ABC):
     
     @property
     def contraction_design_force(self) -> float:
-        print(self.pipe.liquid_pressure_long_longitudinal_force, self.pipe.temperature_longitudinal_force)
         if self.pipe.length > self.long_short_pipe_transition_length:
             return self.pipe.liquid_pressure_long_longitudinal_force + self.pipe.temperature_longitudinal_force - math.sqrt(2 * self.pipe.elastic_modulus * self.pipe.cross_sectional_area * self.pipe.allowable_contraction_movement * self.sliding_resistance_force)
         if self.long_short_pipe_transition_length > self.pipe.length:
@@ -626,21 +623,21 @@ class CoarseEmbedment(Embedment):
                 "si_unit": "",
                 "formula_html": f"{self.compaction_class}",
                 "formula_xls": "",
-                "reference": " Table 3.3 "
+                "reference": "Table 3.3"
             },
             {
                 "label": "Embedment effective angle of shearing resistance",
                 "output": self.effective_angle_shearing_resistance,
                 "si_unit": "°",
-                "formula_html": f"ϕ'<sub>e</sub> = {self.effective_angle_shearing_resistance}°",
+                "formula_html": f"ϕ′ₑ = {self.effective_angle_shearing_resistance}°",
                 "formula_xls": "ϕ'_sub",
-                "reference": " Table 3.3 "
+                "reference": "Table 3.3"
             },
             {
                 "label": "Embedment friction reduction factor",
                 "output": self.friction_reduction_factor,
                 "si_unit": "°",
-                "formula_html": f"f<sub>ϕ'</sub><sub>e</sub> = {self.friction_reduction_factor}°",
+                "formula_html": f"f_ϕ′ₑ = {self.friction_reduction_factor}°",
                 "formula_xls": "F_ϕ'",
                 "reference": " Table 3.3 "
             },
@@ -648,7 +645,7 @@ class CoarseEmbedment(Embedment):
                 "label": "Backfill unit weight (TO BE IMPLEMENTED)",
                 "output": self.backfill_soil.unit_weight,
                 "si_unit": "kN/m3",
-                "formula_html": f"γ<sub>S</sub> = {self.backfill_soil.unit_weight} kN/m3",
+                "formula_html": f"γ_S = {self.backfill_soil.unit_weight} kN/m3",
                 "formula_xls": "γ_S",
                 "reference": " Table 3.5 "
             },
@@ -656,7 +653,7 @@ class CoarseEmbedment(Embedment):
                 "label": "Pipe material factor",
                 "output": self.pipe.pipe_material_factor,
                 "si_unit": "",
-                "formula_html": f"ϕ<sub>m</sub> = {self.pipe.pipe_material_factor}",
+                "formula_html": f"ϕₘ = {self.pipe.pipe_material_factor}",
                 "formula_xls": "ϕ_m",
                 "reference": "Section 3.2.3"
             },
@@ -664,7 +661,7 @@ class CoarseEmbedment(Embedment):
                 "label": "Displacement limitation factor – embedment sliding resistance",
                 "output": self.embedment_sliding_resistance_factor,
                 "si_unit": "",
-                "formula_html": f"DF<sub>F</sub> = {self.embedment_sliding_resistance_factor}",
+                "formula_html": f"DF_F = {self.embedment_sliding_resistance_factor}",
                 "formula_xls": "DF_F",
                 "reference": "Table 3.9"
             },
@@ -672,7 +669,7 @@ class CoarseEmbedment(Embedment):
                 "label": "Depth below ground to highest groundwater level",
                 "output": self.ground_water_level,
                 "si_unit": "m",
-                "formula_html": f"Z<sub>GW</sub> = {self.ground_water_level}",
+                "formula_html": f"Z_GW = {self.ground_water_level}",
                 "formula_xls": "Z_GW",
                 "reference": "Table 3.9"
             },
@@ -680,7 +677,7 @@ class CoarseEmbedment(Embedment):
                 "label": "Groundwater unit weight",
                 "output": UNIT_WEIGHT_WATER,
                 "si_unit": "kN/m2",
-                "formula_html": f"γ<sub>W</sub> = {UNIT_WEIGHT_WATER} kN/m<sup>2</sup>",
+                "formula_html": f"γ_W = {UNIT_WEIGHT_WATER} kN/m<sup>2</sup>",
                 "formula_xls": "γ_W",
                 "reference": "Table 3.5"
             },
@@ -688,7 +685,7 @@ class CoarseEmbedment(Embedment):
                 "label": "Buoyancy coefficient for pipe embedment",
                 "output": self.buoyancy_coefficient,
                 "si_unit": "",
-                "formula_html": f"C<sub>GW</sub> = 1 – (Z<sub>GW</sub> ÷ (Z<sub>O</sub> + D<sub>O</sub>/2)) = <b>{self.buoyancy_coefficient:.2f}</b>",
+                "formula_html": f"C_GW = 1 − (Z_GW ÷ (Z_O + D_O⁄2)) = {self.buoyancy_coefficient:.2f}",
                 "formula_xls": "C_GW",
                 "reference": "Section 3.5"
             },
@@ -696,9 +693,7 @@ class CoarseEmbedment(Embedment):
                 "label": "Embedment friction resistance force",
                 "output": self.sliding_resistance_force,
                 "si_unit": "kN/m",
-                "formula_html": f" F<sub>F</sub> = ϕ<sub>m</sub> &times; 2 &times; D<sub>o</sub> &times; (Y<sub>s</sub> &minus; \
-                    (C<sub>GW</sub> &times; Y<sub>w</sub>)) &times; (Z<sub>0</sub> + 0.3 &times; D<sub>o</sub>) &times; \
-                        tan(f<sub>ue</sub> &times; &phi;<sup>&prime;</sup>) &divide; DF<sub>F</sub> = <b>{self.sliding_resistance_force:.2f} kN/m</b>",
+                "formula_html": f"F_F = ϕₘ × 2 × Dₒ × (Yₛ − (C_GW × Y_w)) × (Z₀ + 0.3 × Dₒ) × tan(f_ϕ′e × ϕ′_e) ÷ DF_F = {self.sliding_resistance_force:.2f} kN/m",
                 "formula_xls": "Ff = Qm * 2 * Do * (Ys - (CGW * Yw)) * (Z0 + 0.3 * Do) * tan(fue * φ′) / DFF",
                 "reference": "Section 3.7.3"
             },
@@ -706,15 +701,15 @@ class CoarseEmbedment(Embedment):
                 "label": "Embedment sliding resistance force",
                 "output": self.sliding_resistance_force,
                 "si_unit": "kN/m",
-                "formula_html": f" F<sub>S</sub> = F<sub>F</sub> = <b>{self.sliding_resistance_force:.2f} kN/m</b> ",
-                "formula_xls": "F_S",
+                "formula_html": f"F_S = F_F  = {self.sliding_resistance_force:.2f} kN/m ",
+                "formula_xls": "F_S = F_F",
                 "reference": "Section 4.1.2.3 Step 4"
             },
             {
                 "label": "Long/short PE pipeline transition length",
                 "output": self.long_short_pipe_transition_length,
                 "si_unit": "kN/m",
-                "formula_html": f" <p>L<sub>s</sub> = √(8 x E x A<sub>w</sub> x ΔL<sub>M</sub> / F<sub>s</sub>) = <b>{self.long_short_pipe_transition_length:.2f} m</b></p>",
+                "formula_html": f"Lₛ = √(8 × E × A_w × ΔL_M / Fₛ) = {self.long_short_pipe_transition_length:.2f} m</p>",
                 "formula_xls": "L_S = sqrt(8 * E * A_W * ΔL_M / F_S) ",
                 "reference": "Section 4.1.2.3 Step 4"
             },
@@ -722,8 +717,8 @@ class CoarseEmbedment(Embedment):
                 "label": "Pipeline contraction design force",
                 "output": self.contraction_design_force,
                 "si_unit": "kN",
-                "formula_html": f"F<sub>A</sub> = F<sub>p</sub> + F<sub>T</sub> - √(2 x E x A<sub>w</sub>  x ΔL<sub>M</sub> / L<sub>s</sub>) = <b>{self.contraction_design_force:.2f} kN</b>" if self.long_short_pipe_transition_length < self.pipe.length \
-                    else f"<p>F<sub>AS</sub> = F<sub>p</sub> + F<sub>T</sub> - (2 x E x A<sub>w</sub> x ΔL_M x L<sub>o</sub> / L<sub>s</sub>) - (L<sub>o</sub> x F<sub>s</sub> ÷ 4) = <b>{self.contraction_design_force:.2f} kN</b></p>",
+                "formula_html": f"F_A = F_p + F_T − √(2 × E × A_w × ΔL_M / L_s) = {self.contraction_design_force:.2f} kN" if self.long_short_pipe_transition_length < self.pipe.length \
+                    else f"F_AS = F_p + F_T − (2 × E × A_w × ΔL_M × L_o / L_s) − (L_o × F_s ÷ 4) {self.contraction_design_force:.2f} kN</p>",
                 "formula_xls": "F_S",
                 "reference": "Section 4.1.2.3 Step 5a" if self.long_short_pipe_transition_length < self.pipe.length else "Section 4.1.2.3 Step 5b"
             },
@@ -731,7 +726,7 @@ class CoarseEmbedment(Embedment):
                 "label": "Pipeline contraction design force",
                 "output": self.contraction_design_force,
                 "si_unit": "kN/m",
-                "formula_html": f"F<sub>D</sub> = <b>{self.contraction_design_force:.2f} kN</b>",
+                "formula_html": f"F_D = {self.contraction_design_force:.2f} kN",
                 "formula_xls": "F_D",
                 "reference": "Section 4.1.2.3 Step"
             },

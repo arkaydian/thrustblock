@@ -2,7 +2,8 @@ import math
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Callable, Dict, Tuple, List, Union
-from app.civeng1.soils.soil_mechanics import Soil, EngRes, create_soil, UNIT_WEIGHT_WATER, CoarseSoil, FineSoil, CoarseEmbedment, FineEmbedment, Embedment, create_embedment
+from app.civeng1.soils.soil_mechanics import Soil, create_soil, UNIT_WEIGHT_WATER, CoarseSoil, FineSoil, CoarseEmbedment, FineEmbedment, Embedment, create_embedment
+from app.civeng1.reporting.engres import EngRes
 from .pipes import WeldedPePipe
 
 #--- Utils and Types ---
@@ -19,7 +20,7 @@ fitting_list = {
 
 FITTING_LABELS = list(fitting_list.keys())
 
-ReportRow = Tuple[str, str]
+ReportRow = Tuple[Any]
 ThrustForce = Tuple[str, float]
 
 # --- Abstract Base Class ---
@@ -113,7 +114,7 @@ class Fitting(ABC):
                 "label": "Depth below ground to highest groundwater level",
                 "output": self.soil_type.ground_water_level,
                 "si_unit": "m",
-                "formula_html": f"Z<sub>GW</sub> = {self.soil_type.ground_water_level} m",
+                "formula_html": f"Z_GW = {self.soil_type.ground_water_level} m",
                 "formula_xls": "Z_GW",
                 "reference": " - "
             },
@@ -121,7 +122,7 @@ class Fitting(ABC):
                 "label": "Depth to crown of larger pipe",
                 "output": self.crown_depth,
                 "si_unit": "m",
-                "formula_html": f"Z<sub>O</sub> = {self.crown_depth} m",
+                "formula_html": f"Z_O = {self.crown_depth} m",
                 "formula_xls": "Z_O",
                 "reference": " - "
             },
@@ -129,7 +130,7 @@ class Fitting(ABC):
                 "label": "Depth to base of block",
                 "output": self.soil_type.thrust_block.depth,
                 "si_unit": "m",
-                "formula_html": f"Z<sub>b</sub> = {self.soil_type.thrust_block.depth} m",
+                "formula_html": f"Z_b = {self.soil_type.thrust_block.depth} m",
                 "formula_xls": "Z_b",
                 "reference": " - "
             },
@@ -137,7 +138,7 @@ class Fitting(ABC):
                 "label": "Buoyancy coefficient",
                 "output": self.soil_type.buoyancy_coefficient,
                 "si_unit": "",
-                "formula_html": f"C<sub>GW</sub> = 1 - (Z<sub>GW</sub> ÷ Z<sub>b</sub>) = <b>{self.soil_type.buoyancy_coefficient:.2f}</b>",
+                "formula_html": f"C_GW = 1 − (Z_GW ÷ Z_b) = {self.soil_type.buoyancy_coefficient:.2f}",
                 "formula_xls": "Z_O",
                 "reference": "Section 3.5"
             },
@@ -153,7 +154,7 @@ class Fitting(ABC):
                 "label": "Native soil unit weight",
                 "output": self.soil_type.unit_weight,
                 "si_unit": "kN/m3",
-                "formula_html": f"γ<sub>s</sub> = {self.soil_type.unit_weight} kN/m3",
+                "formula_html": f"γₛ = {self.soil_type.unit_weight} kN/m3",
                 "formula_xls": "γ_s",
                 "reference": "Table 3.5"
             },
@@ -170,16 +171,12 @@ class Fitting(ABC):
     @property
     def thrust_block_over_turning_stability_check_workflow(self) -> List[EngRes]:
 
-        overturning_stability_check = f"<span style='color: green'><b>{self.safety_factor_against_overturning:.2f} > 1.5, Passes overturning stability check</b></span>" \
-        if self.safety_factor_against_overturning > 1.5 else \
-        f"<span style='color: red'><b>1.5 > {self.safety_factor_against_overturning:.2f} kN, Fails overturning stability check</b></span>"     
-
         return [
             {
                 "label": "Overturning moment lever arm",
                 "output": self.overturning_level_arm,
                 "si_unit": "m",
-                "formula_html": f"H<sub>c</sub> = Z<sub>b</sub> - (Z<sub>O</sub> + D<sub>O</sub>/2) = <b>{self.overturning_level_arm:.2f}</b> m",
+                "formula_html": f"H_c = Z_b − (Z_O + D_O⁄2) = {self.overturning_level_arm:.2f} m",
                 "formula_xls": "H_c = Z_b - (Z_O + D_O/2)",
                 "reference": "Section 3.9"
             },
@@ -187,7 +184,7 @@ class Fitting(ABC):
                 "label": "Overturning moment",
                 "output": self.over_turning_moment,
                 "si_unit": "kNm",
-                "formula_html": f"M<sub>O</sub> = T x H<sub>c</sub> = <b>{self.over_turning_moment:.2f}</b> kNm",
+                "formula_html": f"M_O = T × H_c = {self.over_turning_moment:.2f} kNm",
                 "formula_xls": "M_O = T x H_c",
                 "reference": "Section 3.9"
             },
@@ -195,15 +192,15 @@ class Fitting(ABC):
                 "label": "Passive face restoring moment",
                 "output": self.passive_face_restoring_moment,
                 "si_unit": "kNm",
-                "formula_html": f"M<sub>p</sub> = σ<sub>pa</sub> x W x H<sup>2</sup>/3 = <b>{self.passive_face_restoring_moment:.2f}</b> kNm",
+                "formula_html": f"M_p = σ_pa × W × H²⁄3 = {self.passive_face_restoring_moment:.2f} kNm",
                 "formula_xls": "M_p = σ_pa * W * (H^2)/3",
                 "reference": "Section 3.9"
             },
             {
                 "label": "Net disturbing moment",
-                "output": self.block_resistance,
+                "output": self.net_disturbing_moment,
                 "si_unit": "kNm",
-                "formula_html": f"M<sub>d</sub> = M<sub>o</sub> – M<sub>p</sub> = <b>{self.block_resistance:.2f}</b> kNm",
+                "formula_html": f"M_d = M_o − M_p = {self.net_disturbing_moment:.2f} kNm",
                 "formula_xls": "M_d = M_o - M_P",
                 "reference": "Section 3.9"
             },
@@ -211,7 +208,7 @@ class Fitting(ABC):
                 "label": "Vertical reaction of block",
                 "output": self.vertical_reaction_block,
                 "si_unit": "kN",
-                "formula_html": f"R<sub>v</sub> = (γ<sub>s</sub> – (C<sub>GW</sub> x γ<sub>W</sub>)) x Z<sub>b</sub> x W x L = <b>{self.vertical_reaction_block:.2f}</b> kN",
+                "formula_html": f"R_v = (γ_s − (C_GW × γ_W)) × Z_b × W × L = {self.vertical_reaction_block:.2f} kN",
                 "formula_xls": "R_v = (γ_s - (C_GW * γ_w)) * Z_b * H * L",
                 "reference": "Section 3.9"
             },
@@ -219,7 +216,7 @@ class Fitting(ABC):
                 "label": "Concrete block restoring moment",
                 "output": f"{self.block_restoring_moment}",
                 "si_unit": "kNm",
-                "formula_html": f"M<sub>R</sub> = R<sub>v</sub> x L/2 = <b>{self.block_restoring_moment:.2f}</b> kNm",
+                "formula_html": f"M_R = R_v × L⁄2 = {self.block_restoring_moment:.2f} kNm",
                 "formula_xls": "M_R = R_v * L/2",
                 "reference": "Section 3.9"
             },
@@ -227,16 +224,16 @@ class Fitting(ABC):
                 "label": "Safety factor against overturning",
                 "output": self.safety_factor_against_overturning,
                 "si_unit": "m",
-                "formula_html": f"SF<sub>O</sub> = M<sub>R</sub> ÷ M<sub>d</sub> = <b>{self.safety_factor_against_overturning:.2f}</b>",
+                "formula_html": f"SF_O = M_R ÷ M_d = {self.safety_factor_against_overturning:.2f}",
                 "formula_xls": "SF_O = M_R / M_d",
                 "reference": "Section 3.9"
             },
             {
                 "label": "Overturning stability check",
-                "output": overturning_stability_check,
+                "output": self.overturning_check,
                 "si_unit": " - ",
-                "formula_html": overturning_stability_check,
-                "formula_xls": "",
+                "formula_html": f"{self.safety_factor_against_overturning:.2f} > 1.5, Pass" if self.overturning_check else f"1.5 > {self.safety_factor_against_overturning:.2f}, Fail",
+                "formula_xls": "Pass overturning stability" if self.overturning_check else "Fail overturning stability",
                 "reference": " - "
             }
         ]
@@ -289,16 +286,13 @@ class HorizontalBend(Fitting):
     
     @property
     def fitting_workflow_res(self) -> List[EngRes]:
-        thrust_pass_through_check = f"<span style='color: green'><b>{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Passes thrust resistance</b></span>" \
-        if self.block_resistance > self.thrust_force_resultant else \
-        f"<span style='color: red'><b>{self.thrust_force_resultant:.2f} kN > {self.block_resistance:.2f} kN, Fails thrust resistance</b></span>"
         
         fitting_dims: List[EngRes] = [
             {
                 "label": "Pipe outside diameter",
                 "output": self.outside_diameter,
                 "si_unit": "m",
-                "formula_html": f"D<sub>O</sub> = {self.outside_diameter}",
+                "formula_html": f"D_O = {self.outside_diameter}",
                 "formula_xls": "D_O",
                 "reference": ""
             },
@@ -316,7 +310,7 @@ class HorizontalBend(Fitting):
                 "label": "Block resistance force",
                 "output": self.block_resistance,
                 "si_unit": "m",
-                "formula_html": f"R<sub>s</sub> = (σ<sub>pa</sub> x A<sub>f</sub>) + (𝜏<sub>b</sub> x A<sub>b</sub>) = <b>{self.block_resistance:.2f} kN</b>",
+                "formula_html": f"R_s = (σ_pa × A_f) + (𝜏_b × A_b) = {self.block_resistance:.2f} kN",
                 "formula_xls": "R_s",
                 "reference": "Section 4.1.3"
             },
@@ -324,16 +318,16 @@ class HorizontalBend(Fitting):
                 "label": "Thrust force",
                 "output": self.thrust_force_resultant,
                 "si_unit": "m",
-                "formula_html": f"T = 2 x P x π/4 x (D<sub>O</sub>)<sup>2</sup> x sin(θ/2) = <b>{self.thrust_force_resultant:.2f} kN</b>",
+                "formula_html": f"T = 2 × P × π⁄4 × (D_O)² × sin(θ⁄2) = {self.thrust_force_resultant:.2f} kN",
                 "formula_xls": "T = 2 x P x π/4 x (D_O)2 x sin(θ/2)",
                 "reference": "Figure 2.3"
             },
             {
                 "label": "Pass through resistance check",
-                "output": thrust_pass_through_check,
+                "output": self.thrust_pass_through_check,
                 "si_unit": "",
-                "formula_html": thrust_pass_through_check,
-                "formula_xls": "",
+                "formula_html": f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Fail",
+                "formula_xls": f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Fail",
                 "reference": ""
             }
         ]
@@ -380,7 +374,7 @@ class VerticalUpturnBend(Fitting):
                 else f"{self.vertical_block_resistance_force} kN < {self.thrust_force_vertical:.2f} kN Fail vertical ground bearing resistance"
     
     @property
-    def thrust_force_check(self) -> bool:
+    def vertical_force_check(self) -> bool:
         if self.vertical_block_resistance_force > self.thrust_force_vertical:
             return True
         return False
@@ -393,20 +387,13 @@ class VerticalUpturnBend(Fitting):
 
     @property
     def fitting_workflow_res(self) -> List[EngRes]:
-        thrust_pass_through_check = f"<span style='color: green'><b>{self.block_resistance:.2f} kN > {self.thrust_force_horizontal:.2f} kN, Passes thrust resistance</b></span>" \
-        if self.block_resistance > self.thrust_force_horizontal else \
-        f"<span style='color: red'><b>{self.thrust_force_resultant:.2f} kN > {self.block_resistance:.2f} kN, Fails thrust resistance</b></span></span>"
-
-        vertical_ground_bearing_check = f"<span style='color: green'><b>{self.vertical_block_resistance_force:.2f} kN > {self.thrust_force_vertical:.2f} kN, Passes vertical ground bearing resistance</b></span>" \
-        if self.vertical_block_resistance_force > self.thrust_force_vertical else \
-        f"<span style='color: red'><b>{self.thrust_force_vertical:.2f} kN > {self.vertical_block_resistance_force:.2f} kN, Fails vertical ground bearing resistance</b></span>"
         
         fitting_dims: List[EngRes] = [
             {
                 "label": "Pipe outside diameter",
                 "output": self.outside_diameter,
                 "si_unit": "m",
-                "formula_html": f"D<sub>O</sub> = {self.outside_diameter} m",
+                "formula_html": f"D_O = {self.outside_diameter} m",
                 "formula_xls": "D_O",
                 "reference": ""
             },
@@ -424,7 +411,7 @@ class VerticalUpturnBend(Fitting):
                 "label": "Horizontal block resistance force",
                 "output": self.block_resistance,
                 "si_unit": "kN",
-                "formula_html": f"R<sub>s</sub> = (σ<sub>pa</sub> x A<sub>f</sub>) + (𝜏<sub>b</sub> x A<sub>b</sub>) = <b>{self.block_resistance:.2f} kN</b>",
+                "formula_html": f"R_s = (σ_pa × A_f) + (𝜏_b × A_b) = {self.block_resistance:.2f} kN",
                 "formula_xls": "R_s = (σ_pa * A_f) + (𝜏_b * A_b)",
                 "reference": "Section 4.1.3"
             },
@@ -432,22 +419,22 @@ class VerticalUpturnBend(Fitting):
                 "label": "Thrust force (horizontal component)",
                 "output": self.thrust_force_horizontal,
                 "si_unit": "kN",
-                "formula_html": f"T<sub>x</sub> = P x π/4 x (D<sub>O</sub>)<sup>2</sup> x (1 - cos(θ)) = <b>{self.thrust_force_horizontal:.2f} kN</b>",
+                "formula_html": f"T_x = P × π⁄4 × (D_O)² × (1 − cos(θ)) = {self.thrust_force_horizontal:.2f} kN",
                 "formula_xls": "T_x = P * π/4 * D_O^2 * (1 - cos(θ))",
                 "reference": "Figure 2.3"
             },
             {
                 "label": "Pass through resistance check",
-                "output": thrust_pass_through_check,
+                "output": self.thrust_pass_through_check,
                 "si_unit": "",
-                "formula_html": f"{thrust_pass_through_check}",
-                "formula_xls": "",
+                "formula_html": f"{self.block_resistance:.2f} kN > {self.thrust_force_horizontal:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_horizontal:.2f} kN, Fail",
+                "formula_xls": f"{self.block_resistance:.2f} kN > {self.thrust_force_horizontal:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_horizontal:.2f} kN, Fail",
                 "reference": ""
             }
         ]
         
-        vertical_ground_bearing_formula_html = "q<sub>b</sub> = (0.5 * (γ<sub>s</sub> - (C<sub>GW</sub> x γ<sub>w</sub>)) x B x N<sub>γ</sub>) + ((γ<sub>s</sub> - (C<sub>GW</sub> x γ<sub>w</sub>)) x (N<sub>q</sub> - 1) x Z<sub>b</sub>) ÷ DF<sub>P</sub>" \
-        if isinstance(self.soil_type, CoarseSoil) else "q<sub>b</sub> = (6 x C<sub>U</sub>) ÷ DF<sub>P</sub>"
+        vertical_ground_bearing_formula_html = "q_b = [0.5 × (γ_s − (C_GW × γ_w)) × B × N_γ] + [(γ_s − (C_GW × γ_w)) × (N_q − 1) × Z_b] ÷ DF_P"\
+        if isinstance(self.soil_type, CoarseSoil) else "q_b = (6 × C_U) ÷ DF_P"
         vertical_ground_bearing_formula_xls = "q_b = (0.5 * (γ_s - (C_GW * γ_W)) * B * N_γ) + ((γ_S - (C_GW * γ_w) *(N_q - 1)* Z_b) ÷ DF_p" if isinstance(self.soil_type, CoarseSoil) \
         else "q_b = (6 * CU)  ÷ DF_p" 
 
@@ -456,7 +443,7 @@ class VerticalUpturnBend(Fitting):
                 "label": "Bearing capacity coefficient, Nq",
                 "output": self.soil_type.bearing_capacity_coefficients.n_q,
                 "si_unit": "",
-                "formula_html": f"N<sub>q</sub> =  {self.soil_type.bearing_capacity_coefficients.n_q}",
+                "formula_html": f"N_q =  {self.soil_type.bearing_capacity_coefficients.n_q}",
                 "formula_xls": "N_q",
                 "reference": "Table 3.10"
             },
@@ -464,7 +451,7 @@ class VerticalUpturnBend(Fitting):
                 "label": "Bearing capacity coefficient, Nc",
                 "output": self.soil_type.bearing_capacity_coefficients.n_c,
                 "si_unit": "",
-                "formula_html": f"N<sub>c</sub> =  {self.soil_type.bearing_capacity_coefficients.n_c}",
+                "formula_html": f"N_c =  {self.soil_type.bearing_capacity_coefficients.n_c}",
                 "formula_xls": "N_c",
                 "reference": "Table 3.10"
             },
@@ -472,7 +459,7 @@ class VerticalUpturnBend(Fitting):
                 "label": "Bearing capacity coefficient, Nγ",
                 "output": self.soil_type.bearing_capacity_coefficients.n_y,
                 "si_unit": "",
-                "formula_html": f"N<sub>γ</sub> =  {self.soil_type.bearing_capacity_coefficients.n_y}",
+                "formula_html": f"N_γ =  {self.soil_type.bearing_capacity_coefficients.n_y}",
                 "formula_xls": "N_γ",
                 "reference": "Table 3.10"
             }
@@ -483,7 +470,7 @@ class VerticalUpturnBend(Fitting):
                 "label": "Thrust force (vertical component)",
                 "output": self.thrust_force_vertical,
                 "si_unit": "kN",
-                "formula_html": f"T<sub>z</sub> = 2 x P x π/4 x (D<sub>O</sub>)<sup>2</sup> x sin(θ/2) = <b>{self.thrust_force_vertical:.2f}</b> kN",
+                "formula_html": f"T_z = 2 × P × π⁄4 × (D_O)² × sin(θ⁄2) = {self.thrust_force_vertical:.2f} kN",
                 "formula_xls": "T = 2 * P * π/4 * (D_O)2 * sin(θ/2)",
                 "reference": "Figure 2.3"
             },
@@ -491,7 +478,7 @@ class VerticalUpturnBend(Fitting):
                 "label": "Ultimate ground bearing resistance",
                 "output": self.soil_type.ultimate_vertical_bearing_capacity,
                 "si_unit": "kN/m2",
-                "formula_html": f"{vertical_ground_bearing_formula_html} = <b>{self.soil_type.ultimate_vertical_bearing_capacity:.2f} kN/m2</b>",
+                "formula_html": f"{vertical_ground_bearing_formula_html} = {self.soil_type.ultimate_vertical_bearing_capacity:.2f} kN/m2",
                 "formula_xls": vertical_ground_bearing_formula_xls,
                 "reference": "Section 3.8.1"
             },
@@ -499,16 +486,16 @@ class VerticalUpturnBend(Fitting):
                 "label": "Vertical block resistance force",
                 "output": self.vertical_block_resistance_force,
                 "si_unit": "kN",
-                "formula_html": f"Q<sub>b</sub> = q<sub>b</sub> x A<sub>b</sub> = <b>{self.vertical_block_resistance_force:.2f} kN</b>",
+                "formula_html": f"Q_b = q_b × A_b = {self.vertical_block_resistance_force:.2f} kN",
                 "formula_xls": "Q_b = q_b * A_b",
                 "reference": "Section 4.1.4"
             },
             {
                 "label": "vertical ground bearing resistance check",
-                "output": vertical_ground_bearing_check,
+                "output": self.vertical_bend_check,
                 "si_unit": "",
-                "formula_html": vertical_ground_bearing_check,
-                "formula_xls": vertical_ground_bearing_check,
+                "formula_html": self.vertical_bend_check,
+                "formula_xls": self.vertical_bend_check,
                 "reference": ""
             }
         ]
@@ -621,7 +608,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Depth below ground to highest groundwater level",
                 "output": self.soil_type.ground_water_level,
                 "si_unit": "m",
-                "formula_html": f"Z<sub>GW</sub> = {self.soil_type.ground_water_level} m",
+                "formula_html": f"Z_GW = {self.soil_type.ground_water_level} m",
                 "formula_xls": "Z_GW",
                 "reference": " - "
             },
@@ -629,7 +616,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Depth to crown of larger pipe",
                 "output": self.crown_depth,
                 "si_unit": "m",
-                "formula_html": f"Z<sub>O</sub> = {self.crown_depth} m",
+                "formula_html": f"Z_O = {self.crown_depth} m",
                 "formula_xls": "Z_O",
                 "reference": " - "
             },
@@ -637,7 +624,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Depth to base of block",
                 "output": self.soil_type.thrust_block.depth,
                 "si_unit": "m",
-                "formula_html": f"Z<sub>b</sub> = {self.soil_type.thrust_block.depth} m",
+                "formula_html": f"Z_b = {self.soil_type.thrust_block.depth} m",
                 "formula_xls": "Z_b",
                 "reference": " - "
             },
@@ -645,7 +632,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Buoyancy coefficient",
                 "output": self.soil_type.buoyancy_coefficient,
                 "si_unit": "",
-                "formula_html": f"C<sub>GW</sub> = {self.buoyancy_coefficient:.2f} (groundwater level is at the base of the thrust block or above)",
+                "formula_html": f"C_GW = {self.buoyancy_coefficient:.2f} (groundwater level is at the base of the thrust block or above)",
                 "formula_xls": "Z_O",
                 "reference": "Section 3.5"
             },
@@ -661,7 +648,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Native soil unit weight",
                 "output": self.soil_type.unit_weight,
                 "si_unit": "kN/m3",
-                "formula_html": f"γ<sub>s</sub> = {self.soil_type.unit_weight} kN/m3",
+                "formula_html": f"γₛ = {self.soil_type.unit_weight} kN/m3",
                 "formula_xls": "γ_s",
                 "reference": "Table 3.5"
             },
@@ -669,7 +656,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Reinforced concrete unit weight",
                 "output": self.soil_type.thrust_block.reinforced_concrete_unit_weight,
                 "si_unit": "kN/m3",
-                "formula_html": f"γ<sub>RC</sub> = {self.soil_type.thrust_block.reinforced_concrete_unit_weight} kN/m3",
+                "formula_html": f"γ_RC = {self.soil_type.thrust_block.reinforced_concrete_unit_weight} kN/m3",
                 "formula_xls": "γ_RC",
                 "reference": "Table 3.5"
             },
@@ -677,7 +664,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Groundwater unit weight",
                 "output": UNIT_WEIGHT_WATER,
                 "si_unit": "kN/m3",
-                "formula_html": f"γ<sub>W</sub> = {UNIT_WEIGHT_WATER} kN/m3",
+                "formula_html": f"γ_W = {UNIT_WEIGHT_WATER} kN/m3",
                 "formula_xls": "γ_W",
                 "reference": "Table 3.5"
             },
@@ -686,16 +673,16 @@ class VerticalDownturnBend(Fitting):
     @property
     def thrust_block_over_turning_stability_check_workflow(self) -> List[EngRes]:
 
-        overturning_stability_check = f"<span style='color: green'><b>{self.safety_factor_against_overturning:.2f} > 1.5, Passes overturning stability check</b></span>" \
+        overturning_stability_check = f"{self.safety_factor_against_overturning:.2f} > 1.5, Passes overturning stability check" \
         if self.safety_factor_against_overturning > 1.5 else \
-        f"<span style='color: red'><b>1.5 > {self.safety_factor_against_overturning:.2f} kN, Fails overturning stability check</b></span>"     
+        f"1.5 > {self.safety_factor_against_overturning:.2f}, Fails overturning stability check"     
 
         return [
             {
                 "label": "Overturning moment lever arm",
                 "output": self.overturning_level_arm,
                 "si_unit": "m",
-                "formula_html": f"H<sub>c</sub> = Z<sub>b</sub> - (Z<sub>O</sub> + D<sub>O</sub>/2) = <b>{self.overturning_level_arm:.2f} m</b>",
+                "formula_html": f"H_c = Z_b − (Z_O + D_O⁄2) = {self.overturning_level_arm:.2f} m",
                 "formula_xls": "H_c = Z_b - (Z_O + D_O/2)",
                 "reference": "Section 3.9"
             },
@@ -703,7 +690,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Overturning moment",
                 "output": self.over_turning_moment,
                 "si_unit": "kNm",
-                "formula_html": f"M<sub>O</sub> = T<sub>x</sub> x H<sub>c</sub> = <b>{self.over_turning_moment:.2f} kNm</b>",
+                "formula_html": f"M_O = T_x × H_c = {self.over_turning_moment:.2f} kNm",
                 "formula_xls": "M_O = T_x x H_c",
                 "reference": "Section 3.9"
             },
@@ -711,7 +698,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Passive face restoring moment",
                 "output": self.passive_face_restoring_moment,
                 "si_unit": "kNm",
-                "formula_html": f"M<sub>p</sub> = σ<sub>p</sub> x W x H<sup>2</sup>/3 = <b>{self.passive_face_restoring_moment:.2f}kNm</b> ",
+                "formula_html": f"M_p = σ_p × W × H²⁄3 = {self.passive_face_restoring_moment:.2f}kNm ",
                 "formula_xls": "M_p = σ_pa * W * (H^2)/3",
                 "reference": "Section 3.9"
             },
@@ -719,7 +706,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Net disturbing moment",
                 "output": self.net_disturbing_moment,
                 "si_unit": "kNm",
-                "formula_html": f"M<sub>d</sub> = M<sub>o</sub> – M<sub>p</sub> = <b>{self.net_disturbing_moment:.2f} kNm</b>",
+                "formula_html": f"M_d = M_o − M_p = {self.net_disturbing_moment:.2f} kNm",
                 "formula_xls": "M_d = M_o - M_P",
                 "reference": "Section 3.9"
             },
@@ -727,15 +714,15 @@ class VerticalDownturnBend(Fitting):
                 "label": "Vertical reaction of block",
                 "output": self.vertical_reaction_block,
                 "si_unit": "kNm",
-                "formula_html": f"R<sub>v</sub> = (γ<sub>RC</sub> – (C<sub>GW</sub> x γ<sub>W</sub>)) x Z<sub>b</sub> x W x L = <b>{self.vertical_reaction_block:.2f} kN</b>",
+                "formula_html": f"R_v = (γ_RC − (C_GW × γ_W)) × Z_b × W × L = {self.vertical_reaction_block:.2f} kN",
                 "formula_xls": "R_v = (γ_s - (C_GW * γ_w)) * Z_b * H * L",
                 "reference": "Section 3.9"
             },
-                        {
+            {
                 "label": "Net vertical reaction of block",
                 "output": self.net_vertical_reaction_block,
                 "si_unit": "kNm",
-                "formula_html": f"R<sub>v_net</sub> = R<sub>v</sub> - T<sub>z</sub>= <b>{self.net_vertical_reaction_block:.2f} kN</b>",
+                "formula_html": f"R_vₙₑₜ = R_v − T_z = {self.net_vertical_reaction_block:.2f} kN",
                 "formula_xls": "R_v = T<sub>z</sub>R_v",
                 "reference": "Section 4.1.5"
             },
@@ -743,7 +730,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Concrete block restoring moment",
                 "output": f"{self.block_restoring_moment:.2f}",
                 "si_unit": "kNm",
-                "formula_html": f"M<sub>R</sub> = R<sub>v_net</sub> x L/2 = <b>{self.block_restoring_moment:.2f} kNm</b>",
+                "formula_html": f"M_R = R_vₙₑₜ × L⁄2 = {self.block_restoring_moment:.2f} kNm",
                 "formula_xls": "M_R = R_v * L/2",
                 "reference": "Section 3.9"
             },
@@ -751,7 +738,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Safety factor against overturning",
                 "output": self.safety_factor_against_overturning,
                 "si_unit": "m",
-                "formula_html": f"SF<sub>O</sub> = M<sub>R</sub> ÷ M<sub>d</sub> = <b>{self.safety_factor_against_overturning:.2f}</b>",
+                "formula_html": f"SF_O = M_R ÷ M_d = {self.safety_factor_against_overturning:.2f}",
                 "formula_xls": "SF_O = M_R / M_d",
                 "reference": "Section 3.9"
             },
@@ -759,28 +746,25 @@ class VerticalDownturnBend(Fitting):
                 "label": "Overturning stability check",
                 "output": overturning_stability_check,
                 "si_unit": "",
-                "formula_html": f"{overturning_stability_check}",
-                "formula_xls": "",
+                "formula_html": overturning_stability_check,
+                "formula_xls": overturning_stability_check,
                 "reference": " - "
             }
         ]
 
     @property
     def fitting_workflow_res(self) -> List[EngRes]:
-        thrust_pass_through_check = f"<span style='color: green'><b>{self.block_resistance:.2f} > {self.thrust_force_horizontal:.2f}, Passes thrust resistance</b></span>" \
-        if self.block_resistance > self.thrust_force_horizontal else \
-        f"<span style='color: red'><b>{self.thrust_force_horizontal:.2f} > {self.block_resistance:.2f}, Fails thrust resistance</b></span>"
 
-        vertical_uplift_check = f"<span style='color: green'><b>{self.uplift_factor_of_safety:.2f} > 1.5, Passes vertical uplift resistance</b></span>" \
+        vertical_uplift_check = f"{self.uplift_factor_of_safety:.2f} > 1.5, Passes vertical uplift resistance" \
         if self.uplift_factor_of_safety > 1.5 else \
-        f"<span style='color: red'><b>1.5  > {self.uplift_factor_of_safety:.2f}, Fails vertical uplift resistance</b></span>"
+        f"1.5  > {self.uplift_factor_of_safety:.2f}, Fails vertical uplift resistance"
         
         fitting_dims: List[EngRes] = [
             {
                 "label": "Pipe outside diameter",
                 "output": self.outside_diameter,
                 "si_unit": "m",
-                "formula_html": f"D<sub>O</sub> = {self.outside_diameter}",
+                "formula_html": f"D_O = {self.outside_diameter}",
                 "formula_xls": "D_O",
                 "reference": ""
             },
@@ -798,7 +782,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Disturbed passive area due to pipe trench",
                 "output": self.area_disturbed_passive,
                 "si_unit": "m",
-                "formula_html": f"A<sub>d</sub> = 1.5 x D<sub>O</sub> x H = <b>{self.area_disturbed_passive:.2f} m2</b>",
+                "formula_html": f"A_d = 1.5 × D_O × H = {self.area_disturbed_passive:.2f} m2",
                 "formula_xls": "A_d",
                 "reference": "Section 4.1.1"
             },
@@ -806,7 +790,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Horizontal block resistance force",
                 "output": self.block_resistance,
                 "si_unit": "kN",
-                "formula_html": f"R<sub>s</sub> = (σ<sub>pa</sub> x A<sub>f</sub>) x (A<sub>f</sub> - A<sub>d</sub>) = <b>{self.block_resistance:.2f} kN</b>",
+                "formula_html": f"R_s = (σ_pa × A_f) × (A_f − A_d) = {self.block_resistance:.2f} kN",
                 "formula_xls": "R_s",
                 "reference": "Figure 2.3"
             },
@@ -814,16 +798,16 @@ class VerticalDownturnBend(Fitting):
                 "label": "Thrust force (horizontal component)",
                 "output": self.thrust_force_horizontal,
                 "si_unit": "kN",
-                "formula_html": f"T<sub>x</sub> = P x π/4 x (D<sub>O</sub>)<sup>2</sup> x (1 - cos(θ)) = <b>{self.thrust_force_horizontal:.2f} kN</b>",
+                "formula_html": f"T_x = P × π⁄4 × (D_O)² × (1 − cos(θ)) = {self.thrust_force_horizontal:.2f} kN",
                 "formula_xls": "T_x = P * π/4 * D_O^2 * (1 - cos(θ))",
                 "reference": "Section 4.1.5"
             },
             {
                 "label": "Pass through resistance check",
-                "output": thrust_pass_through_check,
+                "output": self.thrust_pass_through_check,
                 "si_unit": "",
-                "formula_html": f"{thrust_pass_through_check}",
-                "formula_xls": "",
+                "formula_html": f"{self.block_resistance:.2f} kN > {self.thrust_force_horizontal:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_horizontal:.2f} kN, Fail",
+                "formula_xls": f"{self.block_resistance:.2f} kN > {self.thrust_force_horizontal:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_horizontal:.2f} kN, Fail",
                 "reference": ""
             }
         ]
@@ -833,7 +817,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Thrust force (vertical component)",
                 "output": self.thrust_force_vertical,
                 "si_unit": "kN",
-                "formula_html": f"T<sub>z</sub> = 2 x P x π/4 x (D<sub>O</sub>)<sup>2</sup> x sin(θ/2) = <b>{self.thrust_force_vertical:.2f} kN</b>",
+                "formula_html": f" = {self.thrust_force_vertical:.2f} kN",
                 "formula_xls": "T_Z = 2 * P * π/4 * (D_O)2 * sin(θ/2)",
                 "reference": "Section 2.3"
             },
@@ -841,7 +825,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Effective weight of thrust block",
                 "output": self.effective_weight_thrust_block,
                 "si_unit": "m",
-                "formula_html": f"W<sub>T</sub> = H x W x L x (γ<sub>RC</sub> – (C<sub>GW</sub> x γ<sub>W</sub>)) = <b>{self.effective_weight_thrust_block:.2f} kN/m2</b>",
+                "formula_html": f"T_z = 2 × P × π⁄4 × (D_O)² × sin(θ⁄2) = {self.effective_weight_thrust_block:.2f} kN/m2",
                 "formula_xls": "W_T = H * W * L * (γ_RC - (C_GW - γ_W))",
                 "reference": "Section 3.8.1"
             },
@@ -849,7 +833,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Uplift factor of safety",
                 "output": self.uplift_factor_of_safety,
                 "si_unit": "kN",
-                "formula_html": f"F<sub>s</sub> = W<sub>T</sub> x T<sub>z</sub> = {self.uplift_factor_of_safety:.2f}",
+                "formula_html": f"F_s = W_T × T_z = {self.uplift_factor_of_safety:.2f}",
                 "formula_xls": "Q_b = q_b * A_b",
                 "reference": "Section 4.1.4"
             },
@@ -857,7 +841,7 @@ class VerticalDownturnBend(Fitting):
                 "label": "Uplift resistance check",
                 "output": vertical_uplift_check,
                 "si_unit": "",
-                "formula_html": f"<b>{vertical_uplift_check}</b>",
+                "formula_html": f"{vertical_uplift_check}",
                 "formula_xls": f"{vertical_uplift_check}",
                 "reference": ""
             }
@@ -876,7 +860,7 @@ class Tee(Fitting):
 
     @property
     def thrust_force_resultant(self) -> float:
-        area_branch = math.pi * self.outside_diameter_branch ** 2 / 4
+        area_branch = (math.pi / 4) * self.outside_diameter_branch ** 2 
         return self.maximum_design_pressure * area_branch
     
     @property
@@ -895,16 +879,16 @@ class Tee(Fitting):
 
     @property
     def fitting_workflow_res(self) -> List[EngRes]:
-        thrust_pass_through_check = f"<span style='color: green'><b>{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Passes thrust resistance</b></span>" \
+        thrust_pass_through_check = f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Passes thrust resistance" \
         if self.block_resistance > self.thrust_force_resultant else \
-        f"<span style='color: red'><b>{self.thrust_force_resultant:.2f} kN> {self.block_resistance:.2f} kN, Fails thrust resistance</b></span>"
+        f"{self.thrust_force_resultant:.2f} kN> {self.block_resistance:.2f} kN, Fails thrust resistance"
         
         fitting_dims: List[EngRes] = [
             {
                 "label": "Ouside diameter of branch pipe",
                 "output": self.outside_diameter_branch,
                 "si_unit": "m",
-                "formula_html": f"D<sub>O_B</sub> = {self.outside_diameter_branch}",
+                "formula_html": f"D_O_B = {self.outside_diameter_branch}",
                 "formula_xls": "D_OB",
                 "reference": ""
             },
@@ -914,15 +898,15 @@ class Tee(Fitting):
                 "label": "Block resistance force",
                 "output": self.block_resistance,
                 "si_unit": "m",
-                "formula_html": f"R<sub>s</sub> = (σ<sub>pa</sub> x A<sub>f</sub>) + (𝜏<sub>b</sub> x A<sub>b</sub>) + (2 x 𝜏<sub>s</sub> x A<sub>S</sub>) = {self.block_resistance:.2f}",
-                "formula_xls": "R_s",
+                "formula_html": f"R_s = (σ_pa × A_f) + (𝜏_b × A_b) + [2 × 𝜏_s × A_S] = {self.block_resistance:.2f}",
+                "formula_xls": "R_s = (σ_pa * A_f) + (𝜏_b * A_b) + [2 * 𝜏_s * A_S]",
                 "reference": "Section 4.1.3"
             },
             {
                 "label": "Thrust force",
                 "output": self.thrust_force_resultant,
                 "si_unit": "m",
-                "formula_html": f"T = P x π/4 x D<sub>O_B</sub><sup>2</sup> = <b>{self.thrust_force_resultant:.2f} kN</b>",
+                "formula_html": f"T = P × π⁄4 × D_O_B² = {self.thrust_force_resultant:.2f} kN",
                 "formula_xls": "T =  P * π/4 * (D_OB)^2",
                 "reference": "Figure 2.3"
             },
@@ -930,8 +914,8 @@ class Tee(Fitting):
                 "label": "Pass through resistance check",
                 "output": thrust_pass_through_check,
                 "si_unit": "",
-                "formula_html": f"{thrust_pass_through_check}",
-                "formula_xls": "",
+                "formula_html": f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Fail",
+                "formula_xls": f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Fail",
                 "reference": ""
             }
         ]
@@ -976,16 +960,16 @@ class AngleBranch(Fitting):
     
     @property
     def fitting_workflow_res(self) -> List[EngRes]:
-        thrust_pass_through_check = f"<span style='color: green'><b>{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Passes thrust resistance</b></span>" \
+        thrust_pass_through_check = f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Passes thrust resistance" \
         if self.block_resistance > self.thrust_force_resultant else \
-        f"<span style='color: red'><b>{self.thrust_force_resultant:.2f} kN > {self.block_resistance:.2f} kN, Fails thrust resistance</b></span>"
+        f"{self.thrust_force_resultant:.2f} kN > {self.block_resistance:.2f} kN, Fails thrust resistance"
         
         fitting_dims: List[EngRes] = [
             {
                 "label": "Ouside diameter of branch pipe",
                 "output": self.outside_diameter_branch,
                 "si_unit": "m",
-                "formula_html": f"D<sub>O_B</sub> = {self.outside_diameter_branch} m",
+                "formula_html": f"D_O_B = {self.outside_diameter_branch} m",
                 "formula_xls": "D_OB",
                 "reference": ""
             },
@@ -993,7 +977,7 @@ class AngleBranch(Fitting):
                 "label": "Ouside diameter of main pipe",
                 "output": self.outside_diameter_main,
                 "si_unit": "m",
-                "formula_html": f"D<sub>O_B</sub> = {self.outside_diameter_main} m",
+                "formula_html": f"D_O_M = {self.outside_diameter_main} m",
                 "formula_xls": "D_OM",
                 "reference": ""
             },
@@ -1003,7 +987,7 @@ class AngleBranch(Fitting):
                 "label": "Block resistance force",
                 "output": self.block_resistance,
                 "si_unit": "m",
-                "formula_html": f"R<sub>s</sub> = (σ<sub>pa</sub> x A<sub>f</sub>) + (𝜏<sub>b</sub> x A<sub>b</sub>) + (2 x 𝜏<sub>s</sub> x A<sub>S</sub>) = <b>{self.block_resistance:.2f} kN</b>",
+                "formula_html": f" = {self.block_resistance:.2f} kN",
                 "formula_xls": "R_s = (σ_pa * A_f) + (𝜏_b * A_b) + (2 * 𝜏_s)",
                 "reference": "Section 4.1.1"
             },
@@ -1011,16 +995,16 @@ class AngleBranch(Fitting):
                 "label": "Thrust force",
                 "output": self.thrust_force_resultant,
                 "si_unit": "m",
-                "formula_html": f"T = P x π/4 x D<sub>O_B</sub><sup>2</sup> = <b>{self.thrust_force_resultant:.2f} kN</b>",
+                "formula_html": f"T = P x π/4 x D<sub>O_B</sub><sup>2</sup> = {self.thrust_force_resultant:.2f} kN",
                 "formula_xls": "T = P * π/4 * D_OB^2",
                 "reference": "Figure 2.3"
             },
             {
                 "label": "Pass through resistance check",
-                "output": thrust_pass_through_check,
+                "output": self.thrust_pass_through_check,
                 "si_unit": "",
-                "formula_html": f"{thrust_pass_through_check}",
-                "formula_xls": "",
+                "formula_html": f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Fail",
+                "formula_xls": f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Fail",
                 "reference": ""
             }
         ]
@@ -1043,9 +1027,11 @@ class ClosedValve(Fitting):
         return self.maximum_design_pressure * area
     
     @property
-    def area_disturbed_passive(self):
+    def area_disturbed_passive(self) -> float:
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth:
+            return 0
         return 1.5 * self.outside_diameter \
             * (self.soil_type.thrust_block.height + self.outside_diameter + self.crown_depth - self.soil_type.thrust_block.depth)
     
@@ -1061,16 +1047,16 @@ class ClosedValve(Fitting):
     
     @property
     def fitting_workflow_res(self) -> List[EngRes]:
-        thrust_pass_through_check = f"<span style='color: green'><b>{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Passes thrust resistance</b></span>" \
+        thrust_pass_through_check = f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Passes thrust resistance" \
         if self.block_resistance > self.thrust_force_resultant else \
-        f"<span style='color: red'><b>{self.thrust_force_resultant:.2f} kN> {self.block_resistance:.2f} kN, Fails thrust resistance</b></span>"
+        f"{self.thrust_force_resultant:.2f} kN> {self.block_resistance:.2f} kN, Fails thrust resistance"
         
         fitting_dims: List[EngRes] = [
             {
                 "label": "Pipe outside diameter",
                 "output": f"{self.outside_diameter}",
                 "si_unit": "m",
-                "formula_html": "D<sub>O_B</sub> = ",
+                "formula_html": f"D_O_B = {self.outside_diameter}",
                 "formula_xls": "D_OB",
                 "reference": ""
             },
@@ -1080,7 +1066,7 @@ class ClosedValve(Fitting):
                 "label": "Disturbed passive area due to pipe trench",
                 "output": self.area_disturbed_passive,
                 "si_unit": "m",
-                "formula_html": f"A<sub>d</sub> = 1.5 x D<sub>O</sub> x (H + D<sub>O</sub> + Z<sub>O</sub> - Z<sub>b</sub>) = <b>{self.area_disturbed_passive:.2f} m2</b>",
+                "formula_html": f"A_d = 1.5 × D_O × (H + D_O + Z_O − Z_b) = {self.area_disturbed_passive:.2f} m2",
                 "formula_xls": "A_d",
                 "reference": "Section 4.1.1"
             },
@@ -1088,7 +1074,7 @@ class ClosedValve(Fitting):
                 "label": "Block resistance force",
                 "output": self.block_resistance,
                 "si_unit": "m",
-                "formula_html": f"R<sub>s</sub> = σ<sub>pa</sub> x (A<sub>f</sub> – A<sub>d</sub>) + (𝜏<sub>b</sub> x A<sub>b</sub>) + (2 x 𝜏<sub>s</sub> x A<sub>S</sub>) = <b>{self.block_resistance:.2f} kN</b>",
+                "formula_html": f"R_s = σ_pa × (A_f − A_d) + (𝜏_b × A_b) + (2 × 𝜏_s × A_S) = {self.block_resistance:.2f} kN",
                 "formula_xls": "R_s = σ_pa * (A_f - A_d) + (𝜏_b * A_b) + (2 * 𝜏_s * A_s)",
                 "reference": "Section 4.1.1"
             },
@@ -1096,16 +1082,16 @@ class ClosedValve(Fitting):
                 "label": "Thrust force",
                 "output": self.thrust_force_resultant,
                 "si_unit": "m",
-                "formula_html": f"T = P x π/4 x D<sub>O</sub><sup>2</sup> = <b>{self.thrust_force_resultant:.2f} kN</b>",
+                "formula_html": f"T = P × π⁄4 × D_O² = {self.thrust_force_resultant:.2f} kN",
                 "formula_xls": "T = P * π/4 * (D_O)^2",
                 "reference": "Figure 2.3"
             },
             {
                 "label": "Pass through resistance check",
-                "output": thrust_pass_through_check,
+                "output": self.thrust_pass_through_check,
                 "si_unit": "",
-                "formula_html": f"{thrust_pass_through_check}",
-                "formula_xls": "",
+                "formula_html": f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Fail",
+                "formula_xls": f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Fail",
                 "reference": ""
             }
         ]
@@ -1131,6 +1117,8 @@ class BlankEnd(Fitting):
     def area_disturbed_passive(self):
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth:
+            return 0
         return 1.5 * self.outside_diameter \
             * (self.soil_type.thrust_block.height + self.outside_diameter + self.crown_depth - self.soil_type.thrust_block.depth)
     
@@ -1146,9 +1134,9 @@ class BlankEnd(Fitting):
 
     @property
     def fitting_workflow_res(self) -> List[EngRes]:
-        thrust_pass_through_check = f"<span style='color: green'><b>{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Passes thrust resistance</b></span>" \
+        thrust_pass_through_check = f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Passes thrust resistance" \
         if self.block_resistance > self.thrust_force_resultant else \
-        f"<span style='color: red'><b>{self.thrust_force_resultant:.2f} kN > {self.block_resistance:.2f} kN, Fails thrust resistance</b></span></span>"
+        f"{self.thrust_force_resultant:.2f} kN > {self.block_resistance:.2f} kN, Fails thrust resistance"
         
         fitting_dims: List[EngRes] = [
             {
@@ -1165,7 +1153,7 @@ class BlankEnd(Fitting):
                 "label": "Disturbed passive area due to pipe trench",
                 "output": self.area_disturbed_passive,
                 "si_unit": "m",
-                "formula_html": f"A<sub>d</sub> = 1.5 x D<sub>O</sub> x (H + D<sub>O</sub> + Z<sub>O</sub> - Z<sub>b</sub>) = <b>{self.area_disturbed_passive:.2f} m2</b>",
+                "formula_html": f"A_d = 1.5 × D_O × (H + D_O + Z_O − Z_b) = {self.area_disturbed_passive:.2f} m2",
                 "formula_xls": "A_d = ",
                 "reference": "Section 4.1.1"
             },
@@ -1173,24 +1161,24 @@ class BlankEnd(Fitting):
                 "label": "Block resistance force",
                 "output": self.block_resistance,
                 "si_unit": "m",
-                "formula_html": f"R<sub>s</sub> = σ<sub>pa</sub> x (A<sub>f</sub> – A<sub>d</sub>) + (𝜏<sub>b</sub> x A<sub>b</sub>) + (2 x 𝜏<sub>s</sub> x A<sub>S</sub>) = <b>{self.block_resistance:.2f} kN</b>",
-                "formula_xls": "R_s = ",
+                "formula_html": f"R_s = σ_pa × (A_f − A_d) + (𝜏_b × A_b) + (2 × 𝜏_s × A_S) = {self.block_resistance:.2f} kN",
+                "formula_xls": "R_s = σ_pa * (A_f − A_d) + (𝜏_b * A_b) + (2 * 𝜏_s * A_S)",
                 "reference": "Section 4.1.1"
             },
             {
                 "label": "Thrust force",
                 "output": self.thrust_force_resultant,
                 "si_unit": "m",
-                "formula_html": f"T = P x π/4 x D<sub>O</sub><sup>2</sup> = <b>{self.thrust_force_resultant:.2f} kN</b>",
-                "formula_xls": "T = P * A ",
+                "formula_html": f"T = P × π⁄4 × D_O² = {self.thrust_force_resultant:.2f} kN",
+                "formula_xls": "T = P * π⁄4 * D_O^2 ",
                 "reference": "Figure 2.3"
             },
             {
                 "label": "Pass through resistance check",
-                "output": thrust_pass_through_check,
+                "output": self.thrust_pass_through_check,
                 "si_unit": "",
-                "formula_html": f"{thrust_pass_through_check}",
-                "formula_xls": "",
+                "formula_html": f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Fail",
+                "formula_xls": f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Fail",
                 "reference": ""
             }
         ]
@@ -1219,6 +1207,8 @@ class TaperThrust(Fitting):
     def area_disturbed_passive(self):
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth:
+            return 0
         return 1.5 * self.outside_diameter_large \
             * (self.soil_type.thrust_block.height + self.outside_diameter_large + self.crown_depth - self.soil_type.thrust_block.depth)
     
@@ -1234,16 +1224,16 @@ class TaperThrust(Fitting):
 
     @property
     def fitting_workflow_res(self) -> List[EngRes]:
-        thrust_pass_through_check = f"<span style='color: green'><b>{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Passes thrust resistance</b></span>" \
+        thrust_pass_through_check = f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Passes thrust resistance" \
         if self.block_resistance > self.thrust_force_resultant else \
-        f"<span style='color: red'><b>{self.thrust_force_resultant:.2f} kN> {self.block_resistance:.2f} kN, Fails thrust resistance</b></span>"
+        f"{self.thrust_force_resultant:.2f} kN> {self.block_resistance:.2f} kN, Fails thrust resistance"
         
         fitting_dims: List[EngRes] = [
             {
                 "label": "Pipe outside diameter – larger end",
                 "output": self.outside_diameter_large,
                 "si_unit": "m",
-                "formula_html": f"D<sub>O_A</sub> = {self.outside_diameter_large} m",
+                "formula_html": f"D_O_A = {self.outside_diameter_large} m",
                 "formula_xls": "D_OA = ",
                 "reference": " - "
             },
@@ -1251,7 +1241,7 @@ class TaperThrust(Fitting):
                 "label": "Pipe outside diameter – smaller end",
                 "output": self.outside_diameter_small,
                 "si_unit": "m",
-                "formula_html": f"D<sub>O_B</sub> = {self.outside_diameter_small} m",
+                "formula_html": f"DO_B = {self.outside_diameter_small} m",
                 "formula_xls": "D_OB = ",
                 "reference": " - "
             },
@@ -1261,32 +1251,32 @@ class TaperThrust(Fitting):
                 "label": "Disturbed passive area due to pipe trench",
                 "output": self.area_disturbed_passive,
                 "si_unit": "m",
-                "formula_html": f"A<sub>d</sub> = 1.5 x D<sub>O_A</sub> x (H + D<sub>O_A</sub> + Z<sub>O</sub> - Z<sub>b</sub>) = <b>{self.area_disturbed_passive:.2f} m2</b>",
-                "formula_xls": "A_d = ",
+                "formula_html": f"A_d = 1.5 × D_O_A × (H + D_O_A + Z_O − Z_b) = {self.area_disturbed_passive:.2f} m2",
+                "formula_xls": "A_d = 1.5 * D_O_A * (H + D_O_A + Z_O − Z_b)",
                 "reference": "Section 4.1.1"
             },
             {
                 "label": "Block resistance force",
                 "output": self.block_resistance,
                 "si_unit": "m",
-                "formula_html": f"R<sub>s</sub> = σ<sub>pa</sub> x (A<sub>f</sub> – A<sub>d</sub>) + (𝜏<sub>b</sub> x A<sub>b</sub>) + (2 x 𝜏<sub>s</sub> x A<sub>S</sub>) = <b>{self.block_resistance:.2f} kN</b>",
-                "formula_xls": "R_s = ",
+                "formula_html": f"R_s = σ_pa × (A_f − A_d) + (𝜏_b × A_b) + (2 × 𝜏_s × A_S) = {self.block_resistance:.2f} kN",
+                "formula_xls": "R_s = σ_pa * (A_f − A_d) + (𝜏_b * A_b) + (2 * 𝜏_s * A_S)",
                 "reference": "Section 4.1.1"
             },
             {
                 "label": "Thrust force",
                 "output": self.thrust_force_resultant,
                 "si_unit": "m",
-                "formula_html": f"T = P x π/4 x ((D<sub>O_A</sub>)<sup>2</sup> - (D<sub>O_B</sub>)<sup>2</sup>) = <b>{self.thrust_force_resultant:.2f} kN</b>",
-                "formula_xls": "T = 2 x P x π/4 x (D_O)2 x sin(θ/2) ",
+                "formula_html": f"T = P × π⁄4 × ((D_O_A)² − (D_O_B)²) = {self.thrust_force_resultant:.2f} kN",
+                "formula_xls": "T = P * π⁄4 * ((D_O_A)^2 − (D_O_B)^2) ",
                 "reference": "Figure 2.3"
             },
             {
                 "label": "Pass through resistance check",
-                "output": thrust_pass_through_check,
+                "output": self.thrust_pass_through_check,
                 "si_unit": "",
-                "formula_html": f"{thrust_pass_through_check}",
-                "formula_xls": "",
+                "formula_html": f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Fail",
+                "formula_xls": f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Fail",
                 "reference": " - "
             }
         ]
@@ -1307,6 +1297,8 @@ class FlangedMetallicPipe(Fitting):
     def area_disturbed_passive(self):
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth:
+            return 0
         return 1.5 * self.embedment_type.pipe.outside_diameter \
             * (self.soil_type.thrust_block.height + self.embedment_type.pipe.outside_diameter + self.embedment_type.pipe.crown_depth - self.soil_type.thrust_block.depth)
     
@@ -1334,17 +1326,17 @@ class FlangedMetallicPipe(Fitting):
 
     @property
     def fitting_workflow_res(self) -> List[EngRes]:
-        thrust_pass_through_check = f"<span style='color: green'><b>{self.block_resistance:.2f} kN > {self.embedment_type.contraction_design_force:.2f} kN, Passes thrust resistance</b></span>" \
+        thrust_pass_through_check = f"{self.block_resistance:.2f} kN > {self.embedment_type.contraction_design_force:.2f} kN, Passes thrust resistance" \
         if self.block_resistance > self.embedment_type.contraction_design_force else \
-        f"<span style='color: red'><b>{self.embedment_type.contraction_design_force:.2f} kN> {self.block_resistance:.2f} kN, Fails thrust resistance</b></span>"
+        f"{self.embedment_type.contraction_design_force:.2f} kN> {self.block_resistance:.2f} kN, Fails thrust resistance"
         
         fitting_dims: List[EngRes] = [
             {
                 "label": "Pipe outside diameter",
                 "output": self.embedment_type.pipe.outside_diameter,
                 "si_unit": "m",
-                "formula_html": f"D<sub>O</sub> = {self.embedment_type.pipe.outside_diameter} m",
-                "formula_xls": "D_OB = ",
+                "formula_html": f"D_O = {self.embedment_type.pipe.outside_diameter} m",
+                "formula_xls": "D_O = ",
                 "reference": " - "
             },
         ]
@@ -1353,15 +1345,15 @@ class FlangedMetallicPipe(Fitting):
                 "label": "Disturbed passive area due to pipe trench",
                 "output": self.area_disturbed_passive,
                 "si_unit": "m",
-                "formula_html": f"A<sub>d</sub> = 1.5 x D<sub>O_A</sub> x (H + D<sub>O_A</sub> + Z<sub>O</sub> - Z<sub>b</sub>) = <b>{self.area_disturbed_passive:.2f} m2</b>",
-                "formula_xls": "A_d = ",
+                "formula_html": f"A_d = 1.5 × D_O_A × (H + D_O_A + Z_O − Z_b) = {self.area_disturbed_passive:.2f} m2",
+                "formula_xls": "A_d = 1.5 * D_O_A * (H + D_O_A + Z_O − Z_b)",
                 "reference": "Section 4.1.1"
             },
             {
                 "label": "Block resistance force",
                 "output": self.block_resistance,
                 "si_unit": "m",
-                "formula_html": f"R<sub>s</sub> = σ<sub>pa</sub> x (A<sub>f</sub> – A<sub>d</sub>) + (𝜏<sub>b</sub> x A<sub>b</sub>) + (2 x 𝜏<sub>s</sub> x A<sub>S</sub>) = <b>{self.block_resistance:.2f} kN</b>",
+                "formula_html": f"R_s = σ_pa × (A_f − A_d) + (𝜏_b × A_b) + (2 × 𝜏_s × A_S) = {self.block_resistance:.2f} kN",
                 "formula_xls": "R_s = ",
                 "reference": "Section 4.1.1"
             },
@@ -1369,16 +1361,16 @@ class FlangedMetallicPipe(Fitting):
                 "label": "Design force",
                 "output": self.embedment_type.contraction_design_force,
                 "si_unit": "kN",
-                "formula_html": f"F<sub>d</sub> = <b>{self.embedment_type.contraction_design_force:.2f} kN</b>",
+                "formula_html": f"F<sub>d</sub> = {self.embedment_type.contraction_design_force:.2f} kN",
                 "formula_xls": "F_D",
                 "reference": "Figure 2.3"
             },
             {
                 "label": "Pass through resistance check",
-                "output": thrust_pass_through_check,
+                "output": self.thrust_pass_through_check,
                 "si_unit": "",
-                "formula_html": f"{thrust_pass_through_check}",
-                "formula_xls": "",
+                "formula_html": f"{self.block_resistance:.2f} kN > {self.embedment_type.contraction_design_force:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.embedment_type.contraction_design_force:.2f} kN, Fail",
+                "formula_xls": f"{self.block_resistance:.2f} kN > {self.embedment_type.contraction_design_force:.2f} kN, Pass" if self.thrust_pass_through_check else f"{self.block_resistance:.2f} kN > {self.embedment_type.contraction_design_force:.2f} kN, Fail",
                 "reference": " - "
             }
         ]

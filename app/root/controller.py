@@ -1,7 +1,7 @@
 import viktor as vkt
 import pandas as pd
 from pathlib import Path
-from app.civeng1.hydraulics.fittings import Fitting, fitting_from_params, VerticalDownturnBend, VerticalUpturnBend
+from app.civeng1.hydraulics.fittings import Fitting, fitting_from_params, VerticalDownturnBend, VerticalUpturnBend, build_metallic_flange
 from openpyxl import load_workbook
 from openpyxl.styles import Font, Alignment
 
@@ -40,8 +40,9 @@ class ProjectParametrization(vkt.Parametrization):
     
     # Download button for Word document
     lb = vkt.LineBreak()
-    download_word = vkt.DownloadButton("Download PDF Report", method="download_pdf_document")
+    download_pdf = vkt.DownloadButton("Download PDF Report", method="download_pdf_document")
     download_excel = vkt.DownloadButton("Download Excel Report", method="export_to_excel")
+    download_word = vkt.DownloadButton("Download Word Report", method="download_word_document")
 
 class Project(vkt.Controller):
     label = "Project"
@@ -87,6 +88,19 @@ class Project(vkt.Controller):
 
         return thrust_blocks
     
+    def get_anchor_block_children(self, params, **kwargs) -> list[vkt.api_v1.Entity]:
+        # Collect child entity params
+        entity_id = kwargs['entity_id']
+        
+        # Access child entities using the API
+        # This gets all children of the current entity
+        children = vkt.api_v1.API().get_entity_children(entity_id) 
+        
+        # Filter by entity type
+        anchor_blocks = [child for child in children if child.entity_type.name == 'AnchorBlock']
+
+        return anchor_blocks
+    
     def export_to_excel(self, params, **kwargs):
         """Export the dimensions to an Excel file."""
         # Create a new workbook and select the active sheet
@@ -128,6 +142,7 @@ class Project(vkt.Controller):
     
     def thrust_block_safety_table(self, params, **kwargs):
         thrust_blocks = self.get_thrust_block_children(params, **kwargs)
+        anchor_blocks = self.get_anchor_block_children(params, **kwargs)
 
         data_rows = []
         for child in thrust_blocks:
@@ -140,7 +155,7 @@ class Project(vkt.Controller):
                 uplift_test = "N/A"
 
             if isinstance(fitting_type, VerticalUpturnBend):
-                vertical_thrust = "Pass" if fitting_type.thrust_force_check else "Fail"
+                vertical_thrust = "Pass" if fitting_type.vertical_force_check else "Fail"
             else: vertical_thrust = "N/A"
 
             if isinstance(fitting_type, VerticalUpturnBend):
@@ -155,6 +170,22 @@ class Project(vkt.Controller):
                 "overturning_moment_check": overturning_moment_check,
                 "vertical_thrust_check": vertical_thrust,
                 "uplift_check": uplift_test,
+                "chainage": child_params.fitting_section.chainage
+                # Add more fields as needed
+            }
+            data_rows.append(row)
+
+        for child in anchor_blocks:
+            child_params = child.last_saved_params  # Get the saved parameters
+            metallic_flange = build_metallic_flange(child_params)
+            row = {
+                "name": child.name,
+                "fitting_type": child_params.pipe_section.pipe_material,
+                "thrust_pass_through_check": "Pass" if metallic_flange.thrust_pass_through_check else "Fail", 
+                "overturning_moment_check": "Pass" if metallic_flange.overturning_check else "Fail",
+                "vertical_thrust_check": "N/A",
+                "uplift_check": "N/A",
+                "chainage": child_params.pipe_section.chainage
                 # Add more fields as needed
             }
             data_rows.append(row)
@@ -205,6 +236,7 @@ class Project(vkt.Controller):
             
             # Access specific fields from the child's parametrization
             row = [
+                child_params.fitting_section.chainage,
                 child_params.fitting_section.fitting_type,
                 child_params.block_section.height,
                 child_params.block_section.width,       
@@ -318,7 +350,7 @@ class Project(vkt.Controller):
                 uplift_test = "N/A"
 
             if isinstance(fitting_type, VerticalUpturnBend):
-                vertical_thrust = "Pass" if fitting_type.thrust_force_check else "Fail"
+                vertical_thrust = "Pass" if fitting_type.vertical_force_check else "Fail"
             else: vertical_thrust = "N/A"
 
             if isinstance(fitting_type, VerticalUpturnBend):
@@ -375,6 +407,7 @@ class Project(vkt.Controller):
         thrust_safety_checks_rows = []
         for row in thrust_safety_checks:
             thrust_safety_checks_rows.append({
+                "chainage": row["chainage"],
                 "fitting_type": row["fitting_type"],
                 "thrust_pass_through_check": row["thrust_pass_through_check"],
                 "overturning_moment_check": row["overturning_moment_check"],
@@ -389,12 +422,13 @@ class Project(vkt.Controller):
         fitting_table_rows = []
         for row in fitting_table_data:
             fitting_table_rows.append({
-                "fitting_type": row[0],
-                "height": row[1],
-                "width": row[2],
-                "length": row[3],
-                "depth": row[4],
-                "num": row[5],
+                "chainage": row[0],
+                "fitting_type": row[1],
+                "height": row[2],
+                "width": row[3],
+                "length": row[4],
+                "depth": row[5],
+                "num": row[6],
             })
         components.append(vkt.word.WordFileTag("table3", fitting_table_rows))
 
@@ -416,6 +450,12 @@ class Project(vkt.Controller):
             pdf_file = vkt.convert_word_to_pdf(f1)
 
         return vkt.DownloadResult(pdf_file, f'{params.project_title} thrust_restraint_calculation.pdf')
+    
+    def download_word_document(self, params, **kwargs):
+        word_file = self.generate_word_document(params, **kwargs)
+
+
+        return vkt.DownloadResult(word_file, f'{params.project_title} thrust_restraint_calculation.docx')
     
     @vkt.PDFView("PDF viewer", duration_guess=5)
     def pdf_view(self, params, **kwargs):

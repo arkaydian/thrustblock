@@ -1,11 +1,11 @@
-from typing import Dict, Union, Optional
+from typing import Dict, Union, Optional, Any
 
-EngRes = Dict[str, Union[float, str]]
+EngRes = Dict[str, Any]
 
 def eng(
         *,
         label: str,
-        output: Union[float, str],
+        output: Union[float, str, bool],
         si_unit: str,
         formula_html: str,
         formula_xls: str,

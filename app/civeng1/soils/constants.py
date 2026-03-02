@@ -2,7 +2,7 @@ from .soil_enum import *
 # --- Soil Properties Data from CIRIA C816, Table 3.2 & 3.8 ---
 SOIL_PROPERTIES = {
     SoilCategory.COARSE: {
-        SoilConsistency.LOOSE:     {"cohesion": 0, "friction_angle": (25, 25), "soil_passive_resistance_factor": (3.5, 5.0), "soil_sliding_resistance_factor": (2.5, 3.0)},
+        SoilConsistency.LOOSE:     {"cohesion": 0, "friction_angle": (0, 30), "soil_passive_resistance_factor": (3.5, 5.0), "soil_sliding_resistance_factor": (2.5, 3.0)},
         SoilConsistency.MEDIUM_DENSE: {"cohesion": 0, "friction_angle": (30, 36), "soil_passive_resistance_factor": (2.5, 3.5), "soil_sliding_resistance_factor": (2.0, 2.5)},
         SoilConsistency.DENSE:     {"cohesion": 0, "friction_angle": (36, 41), "soil_passive_resistance_factor": (1.5, 2.5), "soil_sliding_resistance_factor": (1.5, 2.0)},
     },

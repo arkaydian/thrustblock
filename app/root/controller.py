@@ -140,7 +140,7 @@ class Project(vkt.Controller):
         
         return vkt.DownloadResult(excel_file, f'{params.project_title}_thrust_restraint_calculation.xlsx')
     
-    def thrust_block_safety_table(self, params, **kwargs):
+    def block_safety_table(self, params, **kwargs):
         thrust_blocks = self.get_thrust_block_children(params, **kwargs)
         anchor_blocks = self.get_anchor_block_children(params, **kwargs)
 
@@ -192,8 +192,9 @@ class Project(vkt.Controller):
 
         return data_rows
     
-    def get_thrust_block_workflows(self, params, **kwargs):
+    def get_block_workflows(self, params, **kwargs):
         thrust_blocks = self.get_thrust_block_children(params, **kwargs)
+        anchor_blocks = self.get_anchor_block_children(params, **kwargs)
 
         appendices = []
         for child in thrust_blocks:
@@ -212,6 +213,23 @@ class Project(vkt.Controller):
                 "title": f"{child_params.fitting_section.fitting_type} Calculation",
                 "table4": table4 #type: ignore
             })
+
+        for child in anchor_blocks:
+            child_params = child.last_saved_params  # Get the saved parameters
+
+            fitting_type = build_metallic_flange(child_params)
+            table4 = []
+            for row in fitting_type.fitting_workflow_res:
+                table4.append({
+                    "label": row['label'],
+                    "formula": row['formula_html'],
+                    "reference": row['reference'],
+                })
+
+            appendices.append({
+                "title": f"{child_params.pipe_section.pipe_material} Contraction Calculation",
+                "table4": table4 #type: ignore
+            })
             
         return appendices
     
@@ -226,6 +244,7 @@ class Project(vkt.Controller):
         
         # Filter by entity type
         thrust_blocks = self.get_thrust_block_children(params, **kwargs)
+        anchor_blocks = self.get_anchor_block_children(params, **kwargs)
 
         num = 1
         
@@ -238,6 +257,23 @@ class Project(vkt.Controller):
             row = [
                 child_params.fitting_section.chainage,
                 child_params.fitting_section.fitting_type,
+                child_params.block_section.height,
+                child_params.block_section.width,       
+                child_params.block_section.length,
+                child_params.block_section.depth,
+                num
+                # Add more fields as needed
+            ]
+            data_rows.append(row)
+            num += 1
+
+        for child in anchor_blocks:
+            child_params = child.last_saved_params
+
+                        # Access specific fields from the child's parametrization
+            row = [
+                child_params.pipe_section.chainage,
+                child_params.pipe_section.pipe_material,
                 child_params.block_section.height,
                 child_params.block_section.width,       
                 child_params.block_section.length,
@@ -292,40 +328,41 @@ class Project(vkt.Controller):
         
         return vkt.TableResult(table_data, column_headers=headers)
 
-
-    @vkt.TableView("Export Data")
+    @vkt.TableView("Block Dimensions")
     def export_view(self, params, **kwargs):
         # Get the current entity (the Root/parent entity)
         entity_id = kwargs['entity_id']
         
         # Access child entities using the API
-        # This gets all children of the current entity
         children = vkt.api_v1.API().get_entity_children(entity_id) 
         
         # Filter by entity type
         thrust_blocks = [child for child in children if child.entity_type.name == 'ThrustBlock']
         anchor_blocks = [child for child in children if child.entity_type.name == 'AnchorBlock'] 
         
-        # Access parameters of each child
+        # Combine both block types for iteration
+        all_blocks = thrust_blocks + anchor_blocks
+        
         data_rows = []
-        for child in thrust_blocks:
-            child_params = child.last_saved_params  # Get the saved parameters
+        for child in all_blocks:
+            child_params = child.last_saved_params
             
-            # Access specific fields from the child's parametrization
+            # Determine block type dynamically
+            block_type = 'Thrust Block' if child.entity_type.name == 'ThrustBlock' else 'AnchorBlock'
+            
             row = {
                 'Name': child.name,
-                'Type': 'Thrust Block',
-                'Length': child_params.block_section.length,  # Example field
-                'Width': child_params.block_section.width,    # Example field
-                # Add more fields as needed
+                'Type': block_type,
+                'Height (m)': child_params.block_section.height,
+                'Length (m)': child_params.block_section.length,
+                'Width (m)': child_params.block_section.width,
             }
             data_rows.append(row)
         
-        # Convert to DataFrame for export
         df = pd.DataFrame(data_rows)
         return vkt.TableResult(df)
     
-    @vkt.TableView("Thrust Block Checks")
+    @vkt.TableView("Block Checks")
     def thrust_table(self, params, **kwargs):
         # Get the current entity (the Root/parent entity)
         entity_id = kwargs['entity_id']
@@ -402,7 +439,7 @@ class Project(vkt.Controller):
 
 
         # thrust block safety check params
-        thrust_safety_checks = self.thrust_block_safety_table(params, **kwargs)
+        thrust_safety_checks = self.block_safety_table(params, **kwargs)
 
         thrust_safety_checks_rows = []
         for row in thrust_safety_checks:
@@ -432,7 +469,7 @@ class Project(vkt.Controller):
             })
         components.append(vkt.word.WordFileTag("table3", fitting_table_rows))
 
-        appendices = self.get_thrust_block_workflows(params, **kwargs)
+        appendices = self.get_block_workflows(params, **kwargs)
         
         components.append(vkt.word.WordFileTag("appendices", appendices))
 

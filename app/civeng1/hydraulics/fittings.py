@@ -106,6 +106,10 @@ class Fitting(ABC):
         return False
 
     @property
+    def safety_check_reports(self) -> List[EngRes]:
+        raise NotImplementedError("Subclass must implement this `safety_check_reports`")
+
+    @property
     def thrust_block_standard_workflow(self) -> List[EngRes]:
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
@@ -283,6 +287,56 @@ class HorizontalBend(Fitting):
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
         return self.soil_type.thrust_block.depth - (self.crown_depth + self.outside_diameter / 2)
+    
+    @property
+    def thrust_pass_through_check_report(self) -> List[EngRes]:
+        return [
+            {
+                "label": "Block resistance force",
+                "output": self.block_resistance,
+                "si_unit": "kN",
+                "formula_html": f"R_S = {self.block_resistance}",
+                "formula_xls": "R_S",
+                "reference": ""
+            },
+            {
+                "label": "Resultant thrust force",
+                "output": self.thrust_force_resultant,
+                "si_unit": "kN",
+                "formula_html": f"T = {self.thrust_force_resultant}",
+                "formula_xls": "T",
+                "reference": ""
+            },
+            {
+                "label": "check",
+                "output": self.thrust_pass_through_check,
+                "si_unit": "kN",
+                "formula_html": self.thrust_pass_through_check,
+                "formula_xls": "",
+                "reference": ""
+            },
+        ]
+    
+    @property
+    def overturning_check_report(self) -> List[EngRes]:
+        return [
+            {
+                "label": "Safety Factor against overturning",
+                "output": self.block_resistance,
+                "si_unit": "kN",
+                "formula_html": f"R_S = {self.block_resistance}",
+                "formula_xls": "R_S",
+                "reference": ""
+            },
+            {
+                "label": "check",
+                "output": self.overturning_check,
+                "si_unit": "kN",
+                "formula_html": self.overturning_check,
+                "formula_xls": "T",
+                "reference": ""
+            },
+        ]
     
     @property
     def fitting_workflow_res(self) -> List[EngRes]:

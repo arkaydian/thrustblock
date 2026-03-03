@@ -273,10 +273,10 @@ class Parametrization(vkt.Parametrization):
     # soil params 1
     soil_section = vkt.Section("Soil Type Parameters", initially_expanded=True)
     soil_section.soil_type = vkt.OptionField("Soil Type", flex=18, options=soil_list, default="Gravel") #type: ignore
-    soil_section.coarse_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=coarse_consistency, visible=coarse_soil_consistency, default="Medium Dense") #type: ignore
-    soil_section.fine_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=fine_consistency, visible=fine_soil_consistency, default="Firm") #type: ignore
-    soil_section.friction_angle = vkt.NumberField("Friction Angle", flex=25, visible=friction_angle, default=33, step=0.1, max=max_soil_params, min=min_soil_params)
-    soil_section.undrained_shear_strength = vkt.NumberField("Undrained Shear Strength", flex=25, visible=undrained_shear_strength, default=50, step=0.1, max=max_soil_params, min=min_soil_params)
+    soil_section.coarse_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=coarse_consistency, visible=coarse_soil_consistency, default="Medium Dense", description="Refer to `Ciria816, Table 3.2` for `Soil Consistency`") #type: ignore
+    soil_section.fine_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=fine_consistency, visible=fine_soil_consistency, default="Firm", description="Refer to `Ciria816, Table 3.2` for `Soil Consistency`") #type: ignore
+    soil_section.friction_angle = vkt.NumberField("Friction Angle", flex=25, visible=friction_angle, default=33, step=0.1, max=max_soil_params, min=min_soil_params, description="Refer to `Ciria816, Table 3.2` for `Friction Angle`")
+    soil_section.undrained_shear_strength = vkt.NumberField("Undrained Shear Strength", flex=25, visible=undrained_shear_strength, default=50, step=0.1, max=max_soil_params, min=min_soil_params, description="Refer to `Ciria816, Table 3.2` for `Undrained Shear Strength`")
     soil_section.lb = vkt.LineBreak()
     soil_section.soil_passive_factor = vkt.NumberField("DFp", flex=10, default=3, max=max_passive_soil_displacement_factor, min=min_passive_soil_displacement_factor, description="Passive resistance displacement limitation factor - Table 3.6")
     soil_section.soil_sliding_factor = vkt.NumberField("DFs", flex=10, default=2.25, max=max_active_soil_displacement_factor, min=min_active_soil_displacement_factor, description="Sliding resistance displacement limitation factor - Table 3.6")
@@ -320,6 +320,7 @@ class Parametrization(vkt.Parametrization):
     block_section.depth = vkt.NumberField("Thrust Block Depth (Zb)", flex=25, default=2.3, step=0.1)
     block_section.arrangement = vkt.OptionField("Block Arrangement", flex=20, options=["1", "2"], default="1") #type: ignore
     block_section.lb_2 = vkt.LineBreak()
+    block_section.depth = vkt.NumberField("Thrust Block Depth (Zb)", flex=25, default=2.3, step=0.1)
     block_section.download_pdf = vkt.DownloadButton("Export to Excel", method="export_to_excel", flex=24)
 
 class ThrustBlockController(vkt.Controller):

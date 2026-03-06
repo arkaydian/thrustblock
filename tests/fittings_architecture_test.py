@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from app.civeng1.hydraulics.fittings import (
-    HorizontalBend,
+from app.civeng1.hydraulics.fittings import HorizontalBend
+from app.civeng1.calculations.thrust_block_calculation import (
     HorizontalBendThrustBlock,
     build_horizontal_bend,
 )
@@ -39,19 +39,22 @@ def _params() -> SimpleNamespace:
 def test_horizontal_bend_component_can_convert_to_thrust_block_model() -> None:
     params = _params()
     component = HorizontalBend(
-        maximum_design_pressure=params.fitting_section.maximum_design_pressure,
-        crown_depth=params.fitting_section.crown_depth,
-        soil_type=create_soil(params),
         outside_diameter=params.fitting_section.outside_diameter,
         angle=params.fitting_section.angle,
         radius=0,
     )
 
-    calc_model = component.to_thrust_block()
+    calc_model = HorizontalBendThrustBlock(
+        component=component,
+        maximum_design_pressure=params.fitting_section.maximum_design_pressure,
+        crown_depth=params.fitting_section.crown_depth,
+        soil_type=create_soil(params),
+    )
     assert isinstance(calc_model, HorizontalBendThrustBlock)
     assert calc_model.thrust_force_resultant > 0
-    # Backward compatibility: component delegates to child calculation model
-    assert component.thrust_force_resultant == calc_model.thrust_force_resultant
+    # Component attributes are accessible via __getattr__ delegation
+    assert calc_model.outside_diameter == component.outside_diameter
+    assert calc_model.angle == component.angle
 
 
 def test_horizontal_bend_builder_returns_thrust_block_model() -> None:

@@ -1,11 +1,17 @@
 import pytest
 import unittest
-from app.civeng1.soils.soil_mechanics import CoarseEmbedment, FineEmbedment, CoarseSoil, FineSoil, \
-FINE_SOILS, UNIT_WEIGHT_WATER, get_soil_consistency 
+from app.civeng1.soils.soil_mechanics import CoarseEmbedment, FineEmbedment, CoarseSoil, FineSoil, UNIT_WEIGHT_WATER
 from app.civeng1.soils.soil_enum import SoilCategory, SoilConsistency, SoilType, WaterCondition, EmbedmentCategory, EmbedmentClass
-from app.civeng1.hydraulics.fittings import Fitting, HorizontalBend, VerticalDownturnBend, VerticalUpturnBend, ClosedValve, AngleBranch, Tee, TaperThrust, FlangedMetallicPipe
+from app.civeng1.hydraulics.fittings import HorizontalBend, VerticalDownturnBend, VerticalUpturnBend, TaperThrust, FlangedMetallicPipe
 from app.civeng1.hydraulics.pipes import WeldedPePipe, PipeMaterial
 from app.civeng1.structures.concrete import ThrustBlock
+from app.civeng1.calculations.thrust_block_calculation import (
+    HorizontalBendThrustBlock,
+    VerticalDownturnBendThrustBlock,
+    VerticalUpturnBendThrustBlock,
+    TaperThrustThrustBlock,
+    FlangedMetallicPipeThrustBlock
+)
 
 #--- Factory method for thrust block creation
 
@@ -42,12 +48,16 @@ MediumDenseGravel = CoarseSoil(
             friction_angle=33
         )
 
-taper_thrust_example = TaperThrust(
+taper_component = TaperThrust(
+            outside_diameter_large=0.63,
+            outside_diameter_small=0.43
+        )
+
+taper_thrust_example = TaperThrustThrustBlock(
             maximum_design_pressure=1200,
             crown_depth=1,
             soil_type=MediumDenseGravel,
-            outside_diameter_large=0.63,
-            outside_diameter_small=0.43
+            component=taper_component
         )
         
 def test_taper_example():
@@ -88,12 +98,16 @@ FirmClay = FineSoil(
             undrained_shear_strength=50
         )
 
-horizontal_bend_example = HorizontalBend(
+horizontal_bend_component = HorizontalBend(
+            outside_diameter=0.63,
+            angle=45
+        )
+
+horizontal_bend_example = HorizontalBendThrustBlock(
             maximum_design_pressure=1200,
             crown_depth=1,
             soil_type=FirmClay,
-            outside_diameter=0.63,
-            angle=45
+            component=horizontal_bend_component
         )
 
 def test_horizontal_bend():
@@ -132,13 +146,17 @@ FirmClay = FineSoil(
             undrained_shear_strength=50
         )
 
-vertical_upturn_bend_example = VerticalUpturnBend(
-            maximum_design_pressure=1200,
-            crown_depth=1,
-            soil_type=FirmClay,
+vertical_upturn_bend_component = VerticalUpturnBend(
             outside_diameter=0.63,
             angle=45,
             radius=0
+        )
+
+vertical_upturn_bend_example = VerticalUpturnBendThrustBlock(
+            maximum_design_pressure=1200,
+            crown_depth=1,
+            soil_type=FirmClay,
+            component=vertical_upturn_bend_component
         )
 
 def test_vertical_upturn_bend():
@@ -174,13 +192,17 @@ FirmClay = FineSoil(
             undrained_shear_strength=40
         )
 
-vertical_downturn_bend_example = VerticalDownturnBend(
-            maximum_design_pressure=1200,
-            crown_depth=1,
-            soil_type=FirmClay,
+vertical_downturn_bend_component = VerticalDownturnBend(
             outside_diameter=0.63,
             angle=45,
             radius=0
+        )
+
+vertical_downturn_bend_example = VerticalDownturnBendThrustBlock(
+            maximum_design_pressure=1200,
+            crown_depth=1,
+            soil_type=FirmClay,
+            component=vertical_downturn_bend_component
         )
 
 def test_vertical_downturn_bend():
@@ -246,11 +268,15 @@ native_medium_dense_gravel = CoarseSoil(
             friction_angle=33
         )
 
-flanged_metallic_pipe_example = FlangedMetallicPipe(
+flanged_metallic_pipe_component = FlangedMetallicPipe(
+            embedment_type=coarse_embedment
+        )
+
+flanged_metallic_pipe_example = FlangedMetallicPipeThrustBlock(
             maximum_design_pressure=1200,
             crown_depth=1,
             soil_type=native_medium_dense_gravel,
-            embedment_type=coarse_embedment
+            component=flanged_metallic_pipe_component
         )
 
 def test_metallic_flange_bend():

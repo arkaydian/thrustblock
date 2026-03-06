@@ -1,11 +1,17 @@
 import pytest
 import unittest
-from app.civeng1.soils.soil_mechanics import CoarseEmbedment, FineEmbedment, CoarseSoil, FineSoil, \
-FINE_SOILS, UNIT_WEIGHT_WATER, get_soil_consistency 
+from app.civeng1.soils.soil_mechanics import CoarseEmbedment, FineEmbedment, CoarseSoil, FineSoil, UNIT_WEIGHT_WATER
 from app.civeng1.soils.soil_enum import SoilCategory, SoilConsistency, SoilType, WaterCondition, EmbedmentCategory, EmbedmentClass
-from app.civeng1.hydraulics.fittings import Fitting, HorizontalBend, VerticalDownturnBend, VerticalUpturnBend, ClosedValve, AngleBranch, Tee, TaperThrust, FlangedMetallicPipe
+from app.civeng1.hydraulics.fittings import HorizontalBend, VerticalDownturnBend, VerticalUpturnBend, TaperThrust, FlangedMetallicPipe
 from app.civeng1.hydraulics.pipes import WeldedPePipe, PipeMaterial
 from app.civeng1.structures.concrete import ThrustBlock
+from app.civeng1.calculations.thrust_block_calculation import (
+    HorizontalBendThrustBlock,
+    VerticalDownturnBendThrustBlock,
+    VerticalUpturnBendThrustBlock,
+    TaperThrustThrustBlock,
+    FlangedMetallicPipeThrustBlock
+)
 
 # --- Factory method for creating Thrust Blocks
 def create_thrust_block(
@@ -63,11 +69,15 @@ coarse_embedment = CoarseEmbedment(
     embedment_class=EmbedmentClass.S_ONE
 )
 
-flanged_metallic_pipe_example = FlangedMetallicPipe(
+flanged_metallic_pipe_component = FlangedMetallicPipe(
+            embedment_type=coarse_embedment
+        )
+
+flanged_metallic_pipe_example = FlangedMetallicPipeThrustBlock(
             maximum_design_pressure=1200,
             crown_depth=1,
             soil_type=native_medium_dense_gravel,
-            embedment_type=coarse_embedment
+            component=flanged_metallic_pipe_component
         )
 
 def test_metallic_flange_bend():
@@ -121,12 +131,16 @@ taper_medium_dense_gravel = CoarseSoil(
             friction_angle=28
         )
 
-taper_thrust_example = TaperThrust(
+taper_component = TaperThrust(
+            outside_diameter_large=0.3572,
+            outside_diameter_small=0.222
+        )
+
+taper_thrust_example = TaperThrustThrustBlock(
             maximum_design_pressure=1320,
             crown_depth=0.8,
             soil_type=taper_medium_dense_gravel,
-            outside_diameter_large=0.3572,
-            outside_diameter_small=0.222
+            component=taper_component
         )
         
 def test_taper_example():
@@ -167,12 +181,16 @@ horizontal_bend_medium_dense_gravel = CoarseSoil(
             friction_angle=28
         )
 
-horizontal_bend_example = HorizontalBend(
+horizontal_bend_component = HorizontalBend(
+            outside_diameter=0.222,
+            angle=45
+        )
+
+horizontal_bend_example = HorizontalBendThrustBlock(
             maximum_design_pressure=1320,
             crown_depth=0.8,
             soil_type=horizontal_bend_medium_dense_gravel,
-            outside_diameter=0.222,
-            angle=45
+            component=horizontal_bend_component
         )
 
 def test_horizontal_bend():

@@ -1,40 +1,19 @@
 import viktor as vkt
-from app.civeng1.hydraulics import fittings, pipes
-from app.civeng1.soils.soil_mechanics import SoilType, SoilConsistency, SoilCategory, EmbedmentClass, EmbedmentCategory, SOIL_PROPERTIES, WaterCondition, create_embedment
-from app.civeng1.structures.concrete import create_thrust_block, ThrustBlock
+from app.civeng1.hydraulics import pipes
+from app.civeng1.calculations.thrust_block_calculation import build_metallic_flange
+from app.civeng1.soils.soil_mechanics import SoilType, SoilConsistency, SoilCategory, EmbedmentClass, SOIL_PROPERTIES
 import base64
 from pathlib import Path
 from openpyxl import load_workbook
-from openpyxl.styles import Font, Alignment
-from pathlib import Path
 
 #--- utils ---
-fitting_list = fittings.FITTING_LABELS
-
 pipe_material_list: list = [pm.value for pm in pipes.PipeMaterial]
 coarse_embedment_list: list = [ec.label_capitalized for ec in EmbedmentClass]
 soil_list: list = [st.label for st in SoilType]
-soil_category: list = [sc for sc in SoilCategory]
 coarse_consistency: list = [cc.label for cc in SoilConsistency if cc.category ==  SoilCategory.COARSE]
 fine_consistency: list = [fc.label for fc in SoilConsistency if fc.category ==  SoilCategory.FINE]
 
 #--- refactor below to civeng module ---
-def get_soil_type_by_label(label: str) -> SoilType:
-    """
-    Args:
-        label (str): The label to look up (e.g., "Very Loose").
-
-    Returns:
-        SoilConsistency: The value associated with the matching SoilConsistency enum member.
-
-    Raises:
-        ValueError: If the label does not match any SoilConsistency member.
-    """
-    for soil_type in SoilType:
-        if soil_type.label.lower() == label.lower():
-            return soil_type
-    raise ValueError(f"No SoilConsistency found for label: {label}")
-
 def get_soil_category_by_label(label: str) -> SoilCategory:
     """
     Returns the SoilCategory for a given soil label.
@@ -69,207 +48,97 @@ def get_soil_consistency_value_by_label(label: str) -> SoilConsistency:
             return consistency
     raise ValueError(f"No SoilConsistency found for label: {label}")
 
-def get_water_condition(condition: str) -> WaterCondition:
-    for water_condition in WaterCondition:
-        if water_condition.value.lower() == condition.lower():
-            return water_condition
-    raise ValueError(f"No WaterCondition found for label: {condition}")
+def _get_section_soil_property_limit(section, property_name: str, bound_index: int):
+    soil_category = get_soil_category_by_label(section.soil_type)
+    if soil_category == SoilCategory.COARSE:
+        consistency = get_soil_consistency_value_by_label(section.coarse_soil_consistency)
+    else:
+        consistency = get_soil_consistency_value_by_label(section.fine_soil_consistency)
+
+    return SOIL_PROPERTIES[soil_category][consistency][property_name][bound_index]
 
 def max_soil_params(params, **kwargs):
-    soil_category = get_soil_category_by_label(params.soil_section.soil_type)
-    if soil_category == SoilCategory.COARSE:
-        soil_consistency = get_soil_consistency_value_by_label(params.soil_section.coarse_soil_consistency)
-        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["friction_angle"][1]
-        return coarse_angle
-    elif soil_category == SoilCategory.FINE:
-        soil_consistency = get_soil_consistency_value_by_label(params.soil_section.fine_soil_consistency)
-        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["undrained_shear_strength"][1]
-        return fine_strength
+    section = params.soil_section
+    property_name = "friction_angle" if get_soil_category_by_label(section.soil_type) == SoilCategory.COARSE else "undrained_shear_strength"
+    return _get_section_soil_property_limit(section, property_name, 1)
     
 def min_soil_params(params, **kwargs):
-    soil_category = get_soil_category_by_label(params.soil_section.soil_type)
-    if soil_category == SoilCategory.COARSE:
-        soil_consistency = get_soil_consistency_value_by_label(params.soil_section.coarse_soil_consistency)
-        return SOIL_PROPERTIES[soil_category][soil_consistency]["friction_angle"][0]
-    elif soil_category == SoilCategory.FINE:
-        soil_consistency = get_soil_consistency_value_by_label(params.soil_section.fine_soil_consistency)
-        return SOIL_PROPERTIES[soil_category][soil_consistency]["undrained_shear_strength"][0]
+    section = params.soil_section
+    property_name = "friction_angle" if get_soil_category_by_label(section.soil_type) == SoilCategory.COARSE else "undrained_shear_strength"
+    return _get_section_soil_property_limit(section, property_name, 0)
 
 
 def max_passive_soil_displacement_factor(params, **kwargs):
-    soil_category = get_soil_category_by_label(params.soil_section.soil_type)
-    if soil_category == SoilCategory.COARSE:
-        soil_consistency = get_soil_consistency_value_by_label(params.soil_section.coarse_soil_consistency)
-        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_passive_resistance_factor"][1]
-        return coarse_angle
-    elif soil_category == SoilCategory.FINE:
-        soil_consistency = get_soil_consistency_value_by_label(params.soil_section.fine_soil_consistency)
-        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_passive_resistance_factor"][1]
-        return fine_strength
+    return _get_section_soil_property_limit(params.soil_section, "soil_passive_resistance_factor", 1)
     
 def min_passive_soil_displacement_factor(params, **kwargs):
-    soil_category = get_soil_category_by_label(params.soil_section.soil_type)
-    if soil_category == SoilCategory.COARSE:
-        soil_consistency = get_soil_consistency_value_by_label(params.soil_section.coarse_soil_consistency)
-        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_sliding_resistance_factor"][0]
-        return coarse_angle
-    elif soil_category == SoilCategory.FINE:
-        soil_consistency = get_soil_consistency_value_by_label(params.soil_section.fine_soil_consistency)
-        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_sliding_resistance_factor"][0]
-        return fine_strength
+    return _get_section_soil_property_limit(params.soil_section, "soil_passive_resistance_factor", 0)
     
 def max_active_soil_displacement_factor(params, **kwargs):
-    soil_category = get_soil_category_by_label(params.soil_section.soil_type)
-    if soil_category == SoilCategory.COARSE:
-        soil_consistency = get_soil_consistency_value_by_label(params.soil_section.coarse_soil_consistency)
-        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_passive_resistance_factor"][1]
-        return coarse_angle
-    elif soil_category == SoilCategory.FINE:
-        soil_consistency = get_soil_consistency_value_by_label(params.soil_section.fine_soil_consistency)
-        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_passive_resistance_factor"][1]
-        return fine_strength
+    return _get_section_soil_property_limit(params.soil_section, "soil_sliding_resistance_factor", 1)
     
 def min_active_soil_displacement_factor(params, **kwargs):
-    soil_category = get_soil_category_by_label(params.soil_section.soil_type)
-    if soil_category == SoilCategory.COARSE:
-        soil_consistency = get_soil_consistency_value_by_label(params.soil_section.coarse_soil_consistency)
-        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_sliding_resistance_factor"][0]
-        return coarse_angle
-    elif soil_category == SoilCategory.FINE:
-        soil_consistency = get_soil_consistency_value_by_label(params.soil_section.fine_soil_consistency)
-        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_sliding_resistance_factor"][0]
-        return fine_strength
+    return _get_section_soil_property_limit(params.soil_section, "soil_sliding_resistance_factor", 0)
     
 def max_backfill_soil_params(params, **kwargs):
-    soil_category = get_soil_category_by_label(params.backfill_section.soil_type)
-    if soil_category == SoilCategory.COARSE:
-        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.coarse_soil_consistency)
-        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["friction_angle"][1]
-        return coarse_angle
-    elif soil_category == SoilCategory.FINE:
-        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.fine_soil_consistency)
-        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["undrained_shear_strength"][1]
-        return fine_strength
+    section = params.backfill_section
+    property_name = "friction_angle" if get_soil_category_by_label(section.soil_type) == SoilCategory.COARSE else "undrained_shear_strength"
+    return _get_section_soil_property_limit(section, property_name, 1)
     
 def min_backfill_soil_params(params, **kwargs):
-    soil_category = get_soil_category_by_label(params.backfill_section.soil_type)
-    if soil_category == SoilCategory.COARSE:
-        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.coarse_soil_consistency)
-        return SOIL_PROPERTIES[soil_category][soil_consistency]["friction_angle"][0]
-    elif soil_category == SoilCategory.FINE:
-        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.fine_soil_consistency)
-        return SOIL_PROPERTIES[soil_category][soil_consistency]["undrained_shear_strength"][0]
+    section = params.backfill_section
+    property_name = "friction_angle" if get_soil_category_by_label(section.soil_type) == SoilCategory.COARSE else "undrained_shear_strength"
+    return _get_section_soil_property_limit(section, property_name, 0)
 
 
 def max_passive_backfill_soil_displacement_factor(params, **kwargs):
-    soil_category = get_soil_category_by_label(params.backfill_section.soil_type)
-    if soil_category == SoilCategory.COARSE:
-        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.coarse_soil_consistency)
-        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_passive_resistance_factor"][1]
-        return coarse_angle
-    elif soil_category == SoilCategory.FINE:
-        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.fine_soil_consistency)
-        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_passive_resistance_factor"][1]
-        return fine_strength
+    return _get_section_soil_property_limit(params.backfill_section, "soil_passive_resistance_factor", 1)
     
 def min_passive_backfill_soil_displacement_factor(params, **kwargs):
-    soil_category = get_soil_category_by_label(params.backfill_section.soil_type)
-    if soil_category == SoilCategory.COARSE:
-        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.coarse_soil_consistency)
-        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_sliding_resistance_factor"][0]
-        return coarse_angle
-    elif soil_category == SoilCategory.FINE:
-        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.fine_soil_consistency)
-        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_sliding_resistance_factor"][0]
-        return fine_strength
+    return _get_section_soil_property_limit(params.backfill_section, "soil_passive_resistance_factor", 0)
     
 def max_active_backfill_soil_displacement_factor(params, **kwargs):
-    soil_category = get_soil_category_by_label(params.backfill_section.soil_type)
-    if soil_category == SoilCategory.COARSE:
-        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.coarse_soil_consistency)
-        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_passive_resistance_factor"][1]
-        return coarse_angle
-    elif soil_category == SoilCategory.FINE:
-        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.fine_soil_consistency)
-        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_passive_resistance_factor"][1]
-        return fine_strength
+    return _get_section_soil_property_limit(params.backfill_section, "soil_sliding_resistance_factor", 1)
     
 def min_active_backfill_soil_displacement_factor(params, **kwargs):
-    soil_category = get_soil_category_by_label(params.backfill_section.soil_type)
-    if soil_category == SoilCategory.COARSE:
-        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.coarse_soil_consistency)
-        coarse_angle = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_sliding_resistance_factor"][0]
-        return coarse_angle
-    elif soil_category == SoilCategory.FINE:
-        soil_consistency = get_soil_consistency_value_by_label(params.backfill_section.fine_soil_consistency)
-        fine_strength = SOIL_PROPERTIES[soil_category][soil_consistency]["soil_sliding_resistance_factor"][0]
-        return fine_strength
+    return _get_section_soil_property_limit(params.backfill_section, "soil_sliding_resistance_factor", 0)
     
 #--- end refactor ---
     
 #--- visibility conditions ---
 
+def _is_equal_any(lookup_path: str, *values: str):
+    return vkt.Or(*[vkt.IsEqual(vkt.Lookup(lookup_path), value) for value in values])
+
 s_one_compaction = vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S1")
 
-coarse_compaction = vkt.Or(
-    vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S2"),
-    vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S3"),
-    vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S4"),
-)
+coarse_compaction = _is_equal_any("embedment_section.embedment_class", "S2", "S3", "S4")
 
-clay_compaction = vkt.Or(
-    vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S5")
-)
+clay_compaction = vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S5")
 
-adhesion = vkt.Or(
-    vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S5")
-)
+adhesion = vkt.IsEqual(vkt.Lookup("embedment_section.embedment_class"), "S5")
 
 # --- Backfill visibility conditions
 
-coarse_backfill_soil_consistency = vkt.Or(
-    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Gravel"),
-    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Sand"),
-)
+coarse_backfill_soil_consistency = _is_equal_any("backfill_section.soil_type", "Gravel", "Sand")
 
-fine_backfill_soil_consistency = vkt.Or(
-    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Silt"),
-    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Clay"),
-)
+fine_backfill_soil_consistency = _is_equal_any("backfill_section.soil_type", "Silt", "Clay")
 
-backfill_undrained_shear_strength = vkt.Or(
-    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Silt"),
-    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Clay"),
-)
+backfill_undrained_shear_strength = fine_backfill_soil_consistency
 
-backfill_friction_angle = vkt.Or(
-    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Gravel"),
-    vkt.IsEqual(vkt.Lookup("backfill_section.soil_type"), "Sand"),
-)
+backfill_friction_angle = coarse_backfill_soil_consistency
 
 backfill_ground_water_level = vkt.IsEqual(vkt.Lookup("backfill_section.ground_condition"), "Below Water")
 
 # --- Native soil visibility
 
-coarse_soil_consistency = vkt.Or(
-    vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Gravel"),
-    vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Sand"),
-)
+coarse_soil_consistency = _is_equal_any("soil_section.soil_type", "Gravel", "Sand")
 
-fine_soil_consistency = vkt.Or(
-    vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Silt"),
-    vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Clay"),
-)
+fine_soil_consistency = _is_equal_any("soil_section.soil_type", "Silt", "Clay")
 
-undrained_shear_strength = vkt.Or(
-    vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Silt"),
-    vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Clay"),
-)
+undrained_shear_strength = fine_soil_consistency
 
-friction_angle = vkt.Or(
-    vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Gravel"),
-    vkt.IsEqual(vkt.Lookup("soil_section.soil_type"), "Sand"),
-)
+friction_angle = coarse_soil_consistency
 
 ground_water_level = vkt.IsEqual(vkt.Lookup("soil_section.ground_condition"), "Below Water")
 
@@ -286,7 +155,7 @@ class Parametrization(vkt.Parametrization):
     pipe_section.length = vkt.NumberField('Length (m)', flex=25, default=200)
     pipe_section.standard_dimension_ratio = vkt.NumberField('Standard dimension ratio', flex=30, default=17)
     pipe_section.poisson_ratio = vkt.NumberField('Poisson’s ratio (ν)', flex=25, default=0.38)
-    pipe_section.thermal_coefficient = vkt.NumberField('Termal Coefficient', flex=20, default=0.00013)
+    pipe_section.thermal_coefficient = vkt.NumberField('Thermal Coefficient', flex=20, default=0.00013)
     pipe_section.temperature_reduction = vkt.NumberField('Temperature reduction of pipe material (ᶿC)', flex=42, default=10)
     pipe_section.elastic_modulus= vkt.NumberField('Elastic modulus (MPa)', flex=25, default=712)
     pipe_section.allowable_contraction_movement = vkt.NumberField('Allowable contraction movement (m)', flex=40, default=0.005)
@@ -307,7 +176,7 @@ class Parametrization(vkt.Parametrization):
     backfill_section.coarse_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=coarse_consistency, visible=coarse_backfill_soil_consistency, default="Medium Dense", description="Refer to `Ciria816, Table 3.2` for `Soil Consistency`")
     backfill_section.fine_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=fine_consistency, visible=fine_backfill_soil_consistency, default="Firm", description="Refer to `Ciria816, Table 3.2` for `Soil Consistency`")
     backfill_section.friction_angle = vkt.NumberField("Friction Angle", flex=25, visible=backfill_friction_angle, default=33, step=0.1, max=max_backfill_soil_params, min=min_backfill_soil_params, description="Refer to `Ciria816, Table 3.2` for `Friction Angle` values")
-    backfill_section.undrained_shear_strength = vkt.NumberField("Undrained Shear Strength", flex=25, visible=backfill_undrained_shear_strength, default=50, step=0.1, max=max_soil_params, min=min_soil_params, description="Refer to `Ciria816, Table 3.2` for `Undrained Shear Strength`")
+    backfill_section.undrained_shear_strength = vkt.NumberField("Undrained Shear Strength", flex=25, visible=backfill_undrained_shear_strength, default=50, step=0.1, max=max_backfill_soil_params, min=min_backfill_soil_params, description="Refer to `Ciria816, Table 3.2` for `Undrained Shear Strength`")
     backfill_section.lb = vkt.LineBreak()
     backfill_section.soil_passive_factor = vkt.NumberField("DFp", flex=10, default=3, max=max_passive_backfill_soil_displacement_factor, min=min_passive_backfill_soil_displacement_factor, description="Passive resistance displacement limitation factor - Table 3.6")
     backfill_section.soil_sliding_factor = vkt.NumberField("DFs", flex=10, default=2.25, max=max_active_backfill_soil_displacement_factor, min=min_active_backfill_soil_displacement_factor, description="Sliding resistance displacement limitation factor - Table 3.6")
@@ -339,13 +208,13 @@ class Parametrization(vkt.Parametrization):
     block_section.length = vkt.NumberField("Thrust Block Length (L)", flex=25, default=3, step=0.1)
     block_section.depth = vkt.NumberField("Thrust Block Depth (Z_b)", flex=25, default=2.85, step=0.1)
     block_section.lb_2 = vkt.LineBreak()
-    block_section.download_pdf = vkt.DownloadButton("Export to Excel", method="export_to_excel", flex=24)
+    block_section.download_excel = vkt.DownloadButton("Export to Excel", method="export_to_excel", flex=24)
 
 class AnchorBlockController(vkt.Controller):
     parametrization = Parametrization(width=40)
 
     def render_workflow_html(self, params):
-        fitting_type = fittings.build_metallic_flange(params)
+        fitting_type = build_metallic_flange(params)
         dims=   f"""<div class="label">Pressure fixed by the designer </div>
             <div class="result">P = <b>{params.pipe_section.maximum_design_pressure} kN/m2</b></div>
             <div class="reference">Section 2.3</div>
@@ -376,7 +245,7 @@ class AnchorBlockController(vkt.Controller):
         wb = load_workbook(template_path)
         ws = wb["Thrust Block 1"]
 
-        thrust_block = fittings.build_metallic_flange(params)
+        thrust_block = build_metallic_flange(params)
 
         for i, entry in enumerate(thrust_block.fitting_workflow_res):
 
@@ -401,16 +270,15 @@ class AnchorBlockController(vkt.Controller):
     
     @vkt.WebView("Thrust Block Analysis Report")
     def analyze_tb(self, params, **kwargs):
+        """Generates a thrust stability check HTML report."""
 
         image_path = Path(__file__).parent.parent / "assets" / "Arcadis_logo.png"
         with open(image_path, "rb") as img_file:
             img_base64 = base64.b64encode(img_file.read()).decode()
 
-        """Generates a thrust stability check HTML report."""
         html = f"""
         <!DOCTYPE html>
         <html lang="en">
-        <html>
         <head>
         <meta charset="UTF-8">
         <style>
@@ -511,9 +379,9 @@ class AnchorBlockController(vkt.Controller):
     def visualize_thrust_block(self, params, **kwargs):
         """Generate 3D visualization of the concrete thrust block."""
         # Extract dimensions from user inputs
-        height = params.block_section.block_height
-        length = params.block_section.block_length
-        width = params.block_section.block_width
+        height = params.block_section.height
+        length = params.block_section.length
+        width = params.block_section.width
         
         # Create the thrust block as a rectangular extrusion
         # Define the base point at origin

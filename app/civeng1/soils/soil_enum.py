@@ -28,6 +28,28 @@ class SoilType(Enum):
         self.label = label
         self.category = category
 
+    @classmethod
+    def from_string(cls, soil_type: str) -> "SoilType":
+        """
+        Parse soil type string to SoilType enum.
+        
+        Args:
+            soil_type: Soil type label (e.g., 'Gravel', 'Sand', 'Clay')
+        
+        Returns:
+            Corresponding SoilType enum member
+        
+        Raises:
+            ValueError: If soil type is not recognized
+        """
+        for member in cls:
+            if member.label.lower() == soil_type.lower():
+                return member
+        raise ValueError(
+            f"Unknown soil type: {soil_type!r}. "
+            f"Valid types: {', '.join(m.label for m in cls)}"
+        )
+
 class SoilConsistency(Enum):
     """
     Unified soil consistencies for coarse and fine soils. More to be added later
@@ -51,6 +73,28 @@ class SoilConsistency(Enum):
         self.label = label
         self.category = category
 
+    @classmethod
+    def from_string(cls, consistency: str) -> "SoilConsistency":
+        """
+        Parse soil consistency string to SoilConsistency enum.
+        
+        Args:
+            consistency: Soil consistency label (e.g., 'Loose', 'Dense', 'Soft')
+        
+        Returns:
+            Corresponding SoilConsistency enum member
+        
+        Raises:
+            ValueError: If consistency is not recognized
+        """
+        for member in cls:
+            if member.label.lower() == consistency.lower():
+                return member
+        raise ValueError(
+            f"Unknown soil consistency: {consistency!r}. "
+            f"Valid consistencies: {', '.join(m.label for m in cls)}"
+        )
+
 class SoilDesignClass(Enum):
     """
     Soil design classes (C816 Table 2.1).
@@ -67,23 +111,44 @@ class WaterCondition(Enum):
     ABOVE_WATER = "Above Water"
     BELOW_WATER = "Below Water"
 
+    @classmethod
+    def from_string(cls, condition: str) -> "WaterCondition":
+        """
+        Parse water condition string to WaterCondition enum.
+        
+        Args:
+            condition: Water condition string (case-insensitive)
+        
+        Returns:
+            Corresponding WaterCondition enum member
+        
+        Raises:
+            ValueError: If condition is not recognized
+        """
+        for member in cls:
+            if member.value.lower() == condition.lower():
+                return member
+        raise ValueError(
+            f"Unknown water condition: {condition!r}. "
+            f"Valid values: {', '.join(m.value for m in cls)}"
+        )
+
 class EmbedmentCategory(Enum):
     """
-    Docstring for CoarseEmbedmentClass To Be implemented
+    Embedment categories for pipe backfill materials (CIRIA C816 Table 3.3).
     """
     COARSE = "coarse"
     CLAY = "clay"
 
     @property
     def label_capitalized(self):
-        # Capitalize first letter, preserve rest
-        if not self.value:
-            return self.value
-        return self.value[0].upper() + self.value[1:]
+        """Return the category value with first letter capitalized."""
+        return self.value.capitalize()
 
 class EmbedmentClass(Enum):
     """
-    Docstring for CoarseEmbedmentClass To Be implemented
+    Embedment classes for pipe backfill materials (CIRIA C816 Table 3.3).
+    Classes S1-S4 are coarse materials, S5 is clay.
     """
     S_ONE = ("s1", EmbedmentCategory.COARSE)
     S_TWO = ("s2", EmbedmentCategory.COARSE)
@@ -97,35 +162,35 @@ class EmbedmentClass(Enum):
 
     @property
     def label_capitalized(self):
-        # Capitalize only the first character, leave the rest as-is
-        if not self.label:
-            return self.label
-        return self.label[0].upper() + self.label[1:]
+        """Return the embedment class label with first letter capitalized."""
+        return self.label.capitalize()
     
     @classmethod
     def from_frontend(cls, code: str) -> "EmbedmentClass":
+        """
+        Parse frontend embedment code string to EmbedmentClass enum.
+        
+        Args:
+            code: Embedment code string (e.g., 's1', 'S2', 's3')
+        
+        Returns:
+            Corresponding EmbedmentClass enum member
+        
+        Raises:
+            TypeError: If code is not a string
+            ValueError: If code is not recognized
+        """
         if not isinstance(code, str):
-            raise TypeError("code must be a string")
-        key = code.strip()
-
-        # 1) Try exact frontend label match (e.g. "s1", "S2")
+            raise TypeError(f"code must be a string, got {type(code).__name__}")
+        
+        key = code.strip().lower()
+        
+        # Try exact frontend label match
         for member in cls:
-            if member.label.lower() == key.lower():
-                return member  # return the enum member, not member.value
-        raise ValueError(f"Unknown embedment code: {code!r}")
-
-# class EmbedmentCompactness(Enum):
-#     UNCOMPACTED = ("uncompacted", EmbedmentCategory.COARSE)
-#     COMPACTED_EIGHTY_FIVE = ("compacted sands and gravels (85%)", EmbedmentCategory.COARSE)
-#     COMPACTED_NINETY = ("compacted sands and gravels (95%)", EmbedmentCategory.COARSE)
-#     COMPACTED_CLAY_EIGHTY_FIVE = ("compacted clays (85%)", EmbedmentCategory.CLAY)
-#     COMPACTED_CLAY_NINETY = ("compacted clays (90%)", EmbedmentCategory.CLAY)
-    
-#     def __init__(self, label, category):
-#         self.label = label
-#         self.category = category
-
-
+            if member.label.lower() == key:
+                return member
+        
+        raise ValueError(f"Unknown embedment code: {code!r}. Valid codes: {', '.join(m.label for m in cls)}")
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,12 @@
 import viktor as vkt
 import pandas as pd
 from pathlib import Path
-from app.civeng1.hydraulics.fittings import Fitting, fitting_from_params, VerticalDownturnBend, VerticalUpturnBend, build_metallic_flange
+from app.civeng1.calculations.thrust_block_calculation import (
+    VerticalDownturnBendThrustBlock,
+    VerticalUpturnBendThrustBlock,
+    build_metallic_flange,
+    fitting_from_params,
+)
 from openpyxl import load_workbook
 from openpyxl.styles import Font, Alignment
 
@@ -107,12 +112,7 @@ class Project(vkt.Controller):
         template_path =  Path(__file__).parent / "files" / "arcadis_calculation_sheet_template.xlsx"
         wb = load_workbook(template_path)
 
-        for version in params.version_history:
-            ws = wb["Calc Front Sheet"]
-
-
         thrust_blocks = self.get_thrust_block_children(params, **kwargs)
-        data = []
         for child in thrust_blocks:
             child_params = child.last_saved_params  # Get the saved parameters
             ws = wb.copy_worksheet(wb["Thrust Block 1"])
@@ -149,16 +149,17 @@ class Project(vkt.Controller):
             child_params = child.last_saved_params  # Get the saved parameters
 
             fitting_type = fitting_from_params(params=child_params)
-            if isinstance(fitting_type, VerticalDownturnBend):
+            if isinstance(fitting_type, VerticalDownturnBendThrustBlock):
                 uplift_test = "Pass" if fitting_type.uplift_safety_check else "Fail"
             else:
                 uplift_test = "N/A"
 
-            if isinstance(fitting_type, VerticalUpturnBend):
+            if isinstance(fitting_type, VerticalUpturnBendThrustBlock):
                 vertical_thrust = "Pass" if fitting_type.vertical_force_check else "Fail"
-            else: vertical_thrust = "N/A"
+            else:
+                vertical_thrust = "N/A"
 
-            if isinstance(fitting_type, VerticalUpturnBend):
+            if isinstance(fitting_type, VerticalUpturnBendThrustBlock):
                 overturning_moment_check = "N/A" 
             else:
                 overturning_moment_check = "Pass" if fitting_type.overturning_check else "Fail"
@@ -381,16 +382,17 @@ class Project(vkt.Controller):
             child_params = child.last_saved_params  # Get the saved parameters
 
             fitting_type = fitting_from_params(params=child_params)
-            if isinstance(fitting_type, VerticalDownturnBend):
+            if isinstance(fitting_type, VerticalDownturnBendThrustBlock):
                 uplift_test = "Pass" if fitting_type.uplift_safety_check else "Fail"
             else:
                 uplift_test = "N/A"
 
-            if isinstance(fitting_type, VerticalUpturnBend):
+            if isinstance(fitting_type, VerticalUpturnBendThrustBlock):
                 vertical_thrust = "Pass" if fitting_type.vertical_force_check else "Fail"
-            else: vertical_thrust = "N/A"
+            else:
+                vertical_thrust = "N/A"
 
-            if isinstance(fitting_type, VerticalUpturnBend):
+            if isinstance(fitting_type, VerticalUpturnBendThrustBlock):
                 overturning_moment_check = "N/A" 
             else:
                 overturning_moment_check = "Pass" if fitting_type.overturning_check else "Fail"

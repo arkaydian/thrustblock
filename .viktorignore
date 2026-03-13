@@ -1,0 +1,16 @@
+# Exclude test directories and files
+tests/
+test_*.py
+
+# Exclude documentation
+docs/
+*.md
+
+# Exclude log and data files
+logs/
+*.log
+*.csv
+
+# Exclude IDE files
+.vscode/
+.idea/

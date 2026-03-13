@@ -142,6 +142,8 @@ friction_angle = coarse_soil_consistency
 
 ground_water_level = vkt.IsEqual(vkt.Lookup("soil_section.ground_condition"), "Below Water")
 
+key_visibility = _is_equal_any("block_section.is_key", "Yes")
+
 
 #--- ui logic ---
 
@@ -159,7 +161,7 @@ class Parametrization(vkt.Parametrization):
     pipe_section.temperature_reduction = vkt.NumberField('Temperature reduction of pipe material (ᶿC)', flex=42, default=10)
     pipe_section.elastic_modulus= vkt.NumberField('Elastic modulus (MPa)', flex=25, default=712)
     pipe_section.allowable_contraction_movement = vkt.NumberField('Allowable contraction movement (m)', flex=40, default=0.005)
-    pipe_section.chainage = vkt.NumberField("Chainage", flex=20)
+    pipe_section.chainage = vkt.NumberField("Chainage", flex=20, default=20)
 
     # embedment params
     embedment_section = vkt.Section("Embedment Material Parameters", initially_expanded=True)
@@ -208,6 +210,10 @@ class Parametrization(vkt.Parametrization):
     block_section.length = vkt.NumberField("Thrust Block Length (L)", flex=25, default=3, step=0.1)
     block_section.depth = vkt.NumberField("Thrust Block Depth (Z_b)", flex=25, default=2.85, step=0.1)
     block_section.lb_2 = vkt.LineBreak()
+    block_section.is_key = vkt.OptionField("Thrust Block Key:", options=["Yes", "No"], default="No", variant="radio")
+    block_section.lb_3 = vkt.LineBreak()
+    block_section.key_height = vkt.NumberField("Height of Key", flex=30, default=0, visible=key_visibility)
+    block_section.key_length = vkt.NumberField("Length of Key", flex=30, default=0, visible=key_visibility)
     block_section.download_excel = vkt.DownloadButton("Export to Excel", method="export_to_excel", flex=24)
 
 class AnchorBlockController(vkt.Controller):
@@ -268,7 +274,211 @@ class AnchorBlockController(vkt.Controller):
         
         return vkt.DownloadResult(excel_file, 'dimensions.xlsx')
     
-    @vkt.WebView("Thrust Block Analysis Report")
+    @vkt.WebView("Anchor Block Safety Checks")
+    def thrust_force_view(self, params, **kwargs):
+        """Render a card grid with dynamic color coding based on thrust force vs. block resistance."""
+
+        # Build one card per row in the DynamicArray
+
+        fitting_type = build_metallic_flange(params)
+        cards_html = ""
+        for row in fitting_type.safety_report:
+            title = row["title"]
+            shot_title = row["shot_title"] 
+            shot = row["shot"]
+            goal_title = row["goal_title"] 
+            goal = row["goal"]
+            unit = row["unit"]
+
+            # Determine color and status: red if thrust exceeds resistance, green if safe
+            if shot > goal:
+                bg_color = "#4CAF50"        # green — block resistance holds (safe)
+                border_color = "#2E7D32"
+                status = "SAFE 🟢"
+                text_color = "#fff"
+                ratio_color = "#e0f5e0"
+            else:
+                bg_color = "#FF4D4D"        # red — thrust exceeds resistance (unsafe)
+                border_color = "#CC0000"
+                status = "UNSAFE 🔴"
+                text_color = "#fff"
+                ratio_color = "#ffe0e0"
+
+
+            # Compute utilisation ratio (thrust / resistance)
+            ratio = (shot / goal * 100) if goal > 0 else 0
+
+            cards_html += f"""
+            <div class="card" style="background-color:{bg_color}; border: 2px solid {border_color}; color:{text_color};">
+                <div class="card-name">{title}</div>
+                <div class="card-status">{status}</div>
+                <div class="card-divider"></div>
+                <div class="card-row">
+                    <div class="card-label">{shot_title}</div>
+                    <div class="card-value">{shot:.1f} {unit}</div>
+                </div>
+                <div class="card-row">
+                    <div class="card-label">{goal_title}</div>
+                    <div class="card-value">{goal:.1f} {unit}</div>
+                </div>
+                <div class="card-ratio" style="background-color:{ratio_color}; color:#333;">
+                    Utilisation: {ratio:.1f}%
+                </div>
+            </div>
+            """
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Thrust Force Checker</title>
+            <style>
+                * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+
+                body {{
+                    font-family: 'Segoe UI', sans-serif;
+                    background: #f4f6f9;
+                    padding: 32px;
+                }}
+
+                h1 {{
+                    font-size: 22px;
+                    color: #2c3e50;
+                    margin-bottom: 6px;
+                }}
+
+                .meta {{
+                    font-size: 14px;
+                    color: #666;
+                    margin-bottom: 28px;
+                }}
+
+                .meta span {{
+                    font-weight: 600;
+                    color: #333;
+                }}
+
+                .legend {{
+                    display: flex;
+                    gap: 20px;
+                    margin-bottom: 28px;
+                    flex-wrap: wrap;
+                }}
+
+                .legend-item {{
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    font-size: 13px;
+                    color: #444;
+                }}
+
+                .legend-dot {{
+                    width: 14px;
+                    height: 14px;
+                    border-radius: 50%;
+                    flex-shrink: 0;
+                }}
+
+                .grid {{
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+                    gap: 20px;
+                }}
+
+                .card {{
+                    border-radius: 12px;
+                    padding: 20px 16px;
+                    text-align: center;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+                    transition: transform 0.15s ease;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }}
+
+                .card:hover {{
+                    transform: translateY(-3px);
+                }}
+
+                .card-name {{
+                    font-size: 15px;
+                    font-weight: 700;
+                    letter-spacing: 0.3px;
+                }}
+
+                .card-status {{
+                    font-size: 13px;
+                    font-weight: 600;
+                    opacity: 0.95;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }}
+
+                .card-divider {{
+                    height: 1px;
+                    background: rgba(255,255,255,0.35);
+                    margin: 4px 0;
+                }}
+
+                .card-row {{
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    font-size: 13px;
+                    padding: 2px 0;
+                }}
+
+                .card-label {{
+                    opacity: 0.85;
+                    font-weight: 400;
+                }}
+
+                .card-value {{
+                    font-weight: 700;
+                    font-size: 14px;
+                }}
+
+                .card-ratio {{
+                    margin-top: 6px;
+                    border-radius: 8px;
+                    padding: 6px 10px;
+                    font-size: 13px;
+                    font-weight: 600;
+                }}
+
+                .empty {{
+                    color: #999;
+                    font-size: 15px;
+                    margin-top: 40px;
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>⚡ Safety Checks</h1>
+            <div class="meta">
+                Condition: <span>Criterion &gt; value → Unsafe</span>
+            </div>
+
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-dot" style="background:#4CAF50;"></div> Safe (Value ≤ Criterion)
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background:#FF4D4D;"></div> Unsafe (Criterion &gt; Value)
+                </div>
+            </div>
+
+            <div class="grid">
+                {cards_html if cards_html.strip() else '<p class="empty">No blocks defined yet. Add rows in the panel.</p>'}
+            </div>
+        </body>
+        </html>
+        """
+        return vkt.WebResult(html=html)
+    
+    @vkt.WebView("Anchor Block Calculation")
     def analyze_tb(self, params, **kwargs):
         """Generates a thrust stability check HTML report."""
 

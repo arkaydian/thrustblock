@@ -14,6 +14,7 @@ fitting_list = {
     "Closed Valve": "closed_valve",
     "Blank End": "blank_end",
     "Taper Thrust": "taper_thrust",
+    "Line Stop": "line_stop"
 }
 
 FITTING_LABELS = list(fitting_list.keys())
@@ -94,6 +95,11 @@ class ClosedValve(Fitting):
 
 
 @dataclass(frozen=True)
+class LineStop(Fitting):
+    outside_diameter: float
+    
+
+@dataclass(frozen=True)
 class BlankEnd(Fitting):
     outside_diameter: float
 
@@ -118,7 +124,6 @@ class TaperThrust(Fitting):
 @dataclass(frozen=True)
 class FlangedMetallicPipe(Fitting):
     embedment_type: Embedment
-
 
 def fitting_from_params(params: Any, **kwargs):
     # Local import prevents circular dependency: calculation module imports these component classes.

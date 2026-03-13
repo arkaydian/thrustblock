@@ -14,6 +14,7 @@ from app.civeng1.hydraulics.fittings import (
     Tee,
     AngleBranch,
     ClosedValve,
+    LineStop,
     BlankEnd,
     TaperThrust,
     FlangedMetallicPipe,
@@ -106,7 +107,7 @@ class FittingCalculation(ABC):
     def block_resistance(self) -> float:
         return self.soil_type.net_unit_area_soil_pressure * (self.soil_type.area_passive_face - self.area_disturbed_passive) \
             + (self.soil_type.sliding_resistance_base() * self.soil_type.area_base_sliding) \
-            + (2 * self.soil_type.sliding_resistance_side * self.soil_type.area_side_sliding)
+            + (2 * self.soil_type.sliding_resistance_side() * self.soil_type.area_side_sliding)
 
     @property
     def passive_face_restoring_moment(self) -> float:
@@ -282,6 +283,27 @@ class FittingCalculation(ABC):
                 reference=" - ",
             ),
         ]
+    
+    @property
+    def safety_report(self):
+        return [
+            {
+                "title": "Thrust Pass Through Check",
+                "shot_title": "Block Resistance R_s",
+                "shot": self.block_resistance,
+                "goal_title": "Thrust Force (T)",
+                "goal": self.thrust_force_resultant,
+                "unit": "kN"
+            },
+            {
+                "title": "Overturning Stability Check",
+                "shot_title": "Safety Factor against Overturning",
+                "shot": self.safety_factor_against_overturning,
+                "goal_title": "Safety Factor",
+                "goal": 1.5,
+                "unit": ""
+            },
+        ]
 
 # --- Fitting Dataclasses ---
 
@@ -451,7 +473,7 @@ class VerticalUpturnBendThrustBlock(FittingCalculation):
     
     @property
     def vertical_bend_check(self):
-        return f"{self.vertical_block_resistance_force} kN > {self.thrust_force_vertical:.2f} kN Pass vertical ground bearing resistance" if self.vertical_block_resistance_force > self.thrust_force_vertical \
+        return f"{self.vertical_block_resistance_force:.2f} kN > {self.thrust_force_vertical:.2f} kN Pass vertical ground bearing resistance" if self.vertical_block_resistance_force > self.thrust_force_vertical \
                 else f"{self.vertical_block_resistance_force} kN < {self.thrust_force_vertical:.2f} kN Fail vertical ground bearing resistance"
     
     @property
@@ -581,6 +603,27 @@ class VerticalUpturnBendThrustBlock(FittingCalculation):
             )
         ]
         return fitting_dims + self.thrust_block_standard_workflow + self.soil_type.soil_res + bearing_coefficients + thrust_pass_through_res + vertical_resistance_workflow
+    
+    @property
+    def safety_report(self):
+        return [
+            {
+                "title": "Thrust Pass Through Check",
+                "shot_title": "Block Resistance R_s",
+                "shot": self.block_resistance,
+                "goal_title": "Thrust Force (T_x)",
+                "goal": self.thrust_force_horizontal,
+                "unit": "kN"
+            },
+            {
+                "title": "Vertical Ground Bearing Resistance",
+                "shot_title": "Ultimate Ground Bearing Resistance",
+                "shot": self.soil_type.ultimate_vertical_bearing_capacity,
+                "goal_title": "Thrust Force (T_z)",
+                "goal": self.thrust_force_vertical,
+                "unit": "kN"
+            },
+        ]
     
 @dataclass(frozen=True)
 class VerticalDownturnBendThrustBlock(FittingCalculation):
@@ -916,6 +959,35 @@ class VerticalDownturnBendThrustBlock(FittingCalculation):
             )
         ]
         return fitting_dims + self.thrust_block_standard_workflow + self.soil_type.soil_res + thrust_pass_through_res + vertical_uplift_workflow + self.thrust_block_over_turning_stability_check_workflow
+    
+    @property
+    def safety_report(self):
+        return [
+            {
+                "title": "Thrust Pass Through Check",
+                "shot_title": "Block Resistance R_s",
+                "shot": self.block_resistance,
+                "goal_title": "Thrust Force (T_x)",
+                "goal": self.thrust_force_horizontal,
+                "unit": "kN"
+            },
+            {
+                "title": "Uplift Check",
+                "shot_title": "Uplift Safety Factor",
+                "shot": self.uplift_factor_of_safety,
+                "goal_title": "Factor of Safety",
+                "goal": 1.5,
+                "unit": ""
+            },
+            {
+                "title": "Overturning Stability Check",
+                "shot_title": "Safety Factor against Overturning",
+                "shot": self.safety_factor_against_overturning,
+                "goal_title": "Safety Factor",
+                "goal": 1.5,
+                "unit": ""
+            },
+        ]
 
 @dataclass(frozen=True)
 class TeeThrustBlock(FittingCalculation):
@@ -1080,17 +1152,17 @@ class ClosedValveThrustBlock(FittingCalculation):
 
     @property
     def thrust_force_resultant(self) -> float:
-        area = math.pi * self.outside_diameter ** 2 / 4
+        area = math.pi * self.component.outside_diameter ** 2 / 4
         return self.maximum_design_pressure * area
     
     @property
     def area_disturbed_passive(self) -> float:
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
-        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth:
+        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.outside_diameter:
             return 0
-        return 1.5 * self.outside_diameter \
-            * (self.soil_type.thrust_block.height + self.outside_diameter + self.crown_depth - self.soil_type.thrust_block.depth)
+        return 1.5 * self.component.outside_diameter \
+            * (self.soil_type.thrust_block.height + self.component.outside_diameter + self.crown_depth - self.soil_type.thrust_block.depth)
     
     @property
     def overturning_level_arm(self) -> float:
@@ -1100,7 +1172,7 @@ class ClosedValveThrustBlock(FittingCalculation):
         """
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
-        return self.soil_type.thrust_block.depth - (self.crown_depth + self.outside_diameter / 2)
+        return self.soil_type.thrust_block.depth - (self.crown_depth + self.component.outside_diameter / 2)
     
     @property
     def fitting_workflow_res(self) -> List[EngRes]:
@@ -1154,6 +1226,187 @@ class ClosedValveThrustBlock(FittingCalculation):
         ]
         return fitting_dims + self.thrust_block_standard_workflow + self.soil_type.soil_res + thrust_pass_through_res \
         + self.thrust_block_over_turning_stability_check_workflow
+    
+@dataclass(frozen=True)
+class LineStopThrustBlock(FittingCalculation):
+    """Thrust-block calculation model for line stop fittings."""
+
+    component: LineStop
+
+    @property
+    def thrust_force_resultant(self) -> float:
+        area = math.pi * self.component.outside_diameter ** 2 / 4
+        return self.maximum_design_pressure * area
+    
+    @property
+    def area_disturbed_passive(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.outside_diameter:
+            return 0
+        return 1.5 * self.component.outside_diameter \
+            * (self.soil_type.thrust_block.height + self.component.outside_diameter + self.crown_depth - self.soil_type.thrust_block.depth)
+    
+    @property
+    def block_resistance(self) -> float:
+        return self.soil_type.net_unit_area_soil_pressure * (self.soil_type.area_passive_face - self.area_disturbed_passive) \
+            + (self.soil_type.sliding_resistance_base(is_line_stop=True) * self.soil_type.area_base_sliding) \
+            + (2 * self.soil_type.sliding_resistance_side(is_line_stop=True) * self.soil_type.area_side_sliding)
+    
+    @property
+    def overturning_level_arm(self) -> float:
+        """
+        Calculates the overturning lever arm for the thrust block based on fitting geometry.
+        Returns 0 if no matching diameter attribute is found.
+        """
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        return self.soil_type.thrust_block.depth - (self.crown_depth + self.component.outside_diameter / 2)
+    
+    @property
+    def vertical_reaction_block(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        return (self.soil_type.thrust_block.reinforced_concrete_unit_weight - (self.soil_type.buoyancy_coefficient * UNIT_WEIGHT_WATER)) * \
+            self.soil_type.thrust_block.height * self.soil_type.thrust_block.width * self.soil_type.thrust_block.length
+    
+    @property
+    def over_turning_stability_check_workflow(self) -> List[EngRes]:
+        return [
+            _eng_res(
+                label="Overturning moment lever arm",
+                output=self.overturning_level_arm,
+                si_unit="m",
+                formula_html=f"H_c = Z_b − (Z_O + D_O⁄2) = {self.overturning_level_arm:.2f} m",
+                formula_xls="H_c = Z_b - (Z_O + D_O/2)",
+                reference="Section 3.9",
+            ),
+            _eng_res(
+                label="Overturning moment",
+                output=self.over_turning_moment,
+                si_unit="kNm",
+                formula_html=f"M_O = T × H_c = {self.over_turning_moment:.2f} kNm",
+                formula_xls="M_O = T x H_c",
+                reference="Section 3.9",
+            ),
+            _eng_res(
+                label="Passive face restoring moment",
+                output=self.passive_face_restoring_moment,
+                si_unit="kNm",
+                formula_html=f"M_p = σ_pa × W × H²⁄3 = {self.passive_face_restoring_moment:.2f} kNm",
+                formula_xls="M_p = σ_pa * W * (H^2)/3",
+                reference="Section 3.9",
+            ),
+            _eng_res(
+                label="Net disturbing moment",
+                output=self.net_disturbing_moment,
+                si_unit="kNm",
+                formula_html=f"M_d = M_o − M_p = {self.net_disturbing_moment:.2f} kNm",
+                formula_xls="M_d = M_o - M_P",
+                reference="Section 3.9",
+            ),
+            _eng_res(
+                label="Vertical reaction of block",
+                output=self.vertical_reaction_block,
+                si_unit="kN",
+                formula_html=f"R_v = (γ_RC − (C_GW × γ_W)) × Z_b × W × L = {self.vertical_reaction_block:.2f} kN",
+                formula_xls="R_v = (γ_s - (C_GW * γ_w)) * Z_b * H * L",
+                reference="Section 3.9",
+            ),
+            _eng_res(
+                label="Concrete block restoring moment",
+                output=f"{self.block_restoring_moment}",
+                si_unit="kNm",
+                formula_html=f"M_R = R_v × L⁄2 = {self.block_restoring_moment:.2f} kNm",
+                formula_xls="M_R = R_v * L/2",
+                reference="Section 3.9",
+            ),
+            _eng_res(
+                label="Safety factor against overturning",
+                output=self.safety_factor_against_overturning,
+                si_unit="m",
+                formula_html=f"SF_O = M_R ÷ M_d = {self.safety_factor_against_overturning:.2f}",
+                formula_xls="SF_O = M_R / M_d",
+                reference="Section 3.9",
+            ),
+            _eng_res(
+                label="Overturning stability check",
+                output=self.overturning_check,
+                si_unit=" - ",
+                formula_html=f"{self.safety_factor_against_overturning:.2f} > 1.5, Pass" if self.overturning_check else f"1.5 > {self.safety_factor_against_overturning:.2f}, Fail",
+                formula_xls="Pass overturning stability" if self.overturning_check else "Fail overturning stability",
+                reference=" - ",
+            ),
+        ]
+    
+    @property
+    def fitting_workflow_res(self) -> List[EngRes]:
+        thrust_pass_through_check = f"{self.block_resistance:.2f} kN > {self.thrust_force_resultant:.2f} kN, Passes thrust resistance" \
+        if self.block_resistance > self.thrust_force_resultant else \
+        f"{self.thrust_force_resultant:.2f} kN> {self.block_resistance:.2f} kN, Fails thrust resistance"
+        
+        fitting_dims: List[EngRes] = [
+            _eng_res(
+                label="Pipe outside diameter",
+                output=f"{self.outside_diameter}",
+                si_unit="m",
+                formula_html=f"D_O_B = {self.outside_diameter}",
+                formula_xls="D_OB",
+                reference=""
+            ),
+        ]
+        thrust_pass_through_res: List[EngRes] = [
+            _eng_res(
+                label="Adjusted Base Sliding Resistance",
+                output=self.soil_type.sliding_resistance_base(is_line_stop=True),
+                si_unit="m",
+                formula_html=f"τ_b  = {self.soil_type.sliding_resistance_base(is_line_stop=True):.2f} kN/m2",
+                formula_xls="τ_b ",
+                reference="Section 3.7.1"
+            ),
+            _eng_res(
+                label="Adjusted Side Sliding Resistance",
+                output=self.soil_type.sliding_resistance_side(is_line_stop=True),
+                si_unit="m",
+                formula_html=f"τ_s  = {self.soil_type.sliding_resistance_side(is_line_stop=True):.2f} kN/m2",
+                formula_xls="τ_b ",
+                reference="Section 3.7.2"
+            ),
+            _eng_res(
+                label="Disturbed passive area due to pipe trench",
+                output=self.area_disturbed_passive,
+                si_unit="m",
+                formula_html=f"A_d = 1.5 × D_O × (H + D_O + Z_O − Z_b) = {self.area_disturbed_passive:.2f} m2",
+                formula_xls="A_d",
+                reference="Section 4.1.1"
+            ),
+            _eng_res(
+                label="Block resistance force",
+                output=self.block_resistance,
+                si_unit="m",
+                formula_html=f"R_s = σ_pa × (A_f − A_d) + (𝜏_b × A_b) = {self.block_resistance:.2f} kN",
+                formula_xls="R_s = σ_pa * (A_f - A_d) + (𝜏_b * A_b) + (2 * 𝜏_s * A_s)",
+                reference="Section 4.1.1"
+            ),
+            _eng_res(
+                label="Thrust force",
+                output=self.thrust_force_resultant,
+                si_unit="m",
+                formula_html=f"T = P × π⁄4 × D_O² = {self.thrust_force_resultant:.2f} kN",
+                formula_xls="T = P * π/4 * (D_O)^2",
+                reference="Figure 2.3"
+            ),
+            self._pass_fail_check_row(
+                label="Pass through resistance check",
+                lhs=self.block_resistance,
+                rhs=self.thrust_force_resultant,
+                passed=self.thrust_pass_through_check,
+                reference="",
+                output=self.thrust_pass_through_check,
+            )
+        ]
+        return fitting_dims + self.thrust_block_standard_workflow + self.soil_type.soil_res + thrust_pass_through_res \
+        + self.over_turning_stability_check_workflow
 
 
 @dataclass(frozen=True)
@@ -1171,7 +1424,7 @@ class BlankEndThrustBlock(FittingCalculation):
     def area_disturbed_passive(self) -> float:
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
-        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth:
+        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.outside_diameter:
             return 0
         return 1.5 * self.outside_diameter \
             * (self.soil_type.thrust_block.height + self.outside_diameter + self.crown_depth - self.soil_type.thrust_block.depth)
@@ -1256,7 +1509,7 @@ class TaperThrustThrustBlock(FittingCalculation):
     def area_disturbed_passive(self) -> float:
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
-        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth:
+        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.outside_diameter_large:
             return 0
         return 1.5 * self.outside_diameter_large \
             * (self.soil_type.thrust_block.height + self.outside_diameter_large + self.crown_depth - self.soil_type.thrust_block.depth)
@@ -1348,7 +1601,7 @@ class FlangedMetallicPipeThrustBlock(FittingCalculation):
     def area_disturbed_passive(self):
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
-        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth:
+        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.embedment_type.pipe.outside_diameter:
             return 0
         return 1.5 * self.embedment_type.pipe.outside_diameter \
             * (self.soil_type.thrust_block.height + self.embedment_type.pipe.outside_diameter + self.embedment_type.pipe.crown_depth - self.soil_type.thrust_block.depth)
@@ -1357,7 +1610,7 @@ class FlangedMetallicPipeThrustBlock(FittingCalculation):
     def block_resistance(self) -> float:
         return self.soil_type.net_unit_area_soil_pressure * (self.soil_type.area_passive_face - self.area_disturbed_passive) \
             + (self.soil_type.sliding_resistance_base() * self.soil_type.area_base_sliding) \
-            + (2 * self.soil_type.sliding_resistance_side * self.soil_type.area_side_sliding)
+            + (2 * self.soil_type.sliding_resistance_side() * self.soil_type.area_side_sliding)
     
     @property
     def overturning_level_arm(self) -> float:
@@ -1427,6 +1680,27 @@ class FlangedMetallicPipeThrustBlock(FittingCalculation):
         ]
         return self.embedment_type.pipe.render_workflow_report + fitting_dims + self.embedment_type.render_workflow_report + self.thrust_block_standard_workflow + self.soil_type.soil_res + thrust_pass_through_res \
         + self.thrust_block_over_turning_stability_check_workflow
+
+    @property
+    def safety_report(self):
+        return [
+            {
+                "title": "Thrust Pass Through Check",
+                "shot_title": "Block Resistance R_s",
+                "shot": self.block_resistance,
+                "goal_title": "Design Force",
+                "goal": self.component.embedment_type.contraction_design_force,
+                "unit": "kN"
+            },
+            {
+                "title": "Overturning Stability Check",
+                "shot_title": "Safety Factor against Overturning",
+                "shot": self.safety_factor_against_overturning,
+                "goal_title": "Safety Factor",
+                "goal": 1.5,
+                "unit": ""
+            },
+        ]
     
 # --- Builder and Registry ---
 
@@ -1528,6 +1802,20 @@ def build_closed_valve(params: Any) -> FittingCalculation:
         soil_type=create_soil(params),
     )
 
+@register("line_stop")
+def build_line_stop_valve(params: Any) -> FittingCalculation:
+    s = params.fitting_section
+    component = LineStop(
+        outside_diameter=s.outside_diameter
+    )
+    return LineStopThrustBlock(
+        component=component,
+        maximum_design_pressure=s.maximum_design_pressure,
+        crown_depth=s.crown_depth,
+        soil_type=create_soil(params),
+    )
+
+
 @register("blank_end")
 def build_blank_end(params: Any) -> FittingCalculation:
     s = params.fitting_section
@@ -1557,6 +1845,19 @@ def build_taper_thrust(params: Any) -> FittingCalculation:
 
 @register("metallic_flange")
 def build_metallic_flange(params: Any) -> FittingCalculation:
+    s = params.pipe_section
+    component = FlangedMetallicPipe(
+        embedment_type=create_embedment(params)
+    )
+    return FlangedMetallicPipeThrustBlock(
+        component=component,
+        maximum_design_pressure=s.maximum_design_pressure,
+        crown_depth=s.crown_depth,
+        soil_type=create_soil(params),
+    )
+
+@register("metallic_flange")
+def build_line_stop_flange(params: Any) -> FittingCalculation:
     s = params.pipe_section
     component = FlangedMetallicPipe(
         embedment_type=create_embedment(params)

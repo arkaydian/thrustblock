@@ -32,6 +32,7 @@ def _params() -> SimpleNamespace:
             width=1.0,
             length=1.8,
             depth=2.0,
+            is_key = "No"
         ),
     )
 

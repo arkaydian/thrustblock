@@ -1,5 +1,5 @@
 from .soil_enum import *
-from typing import Dict, Tuple, Optional, Any
+from typing import Dict, Any
 
 # --- Soil Properties Data from CIRIA C816, Table 3.2 & 3.8 ---
 SOIL_PROPERTIES: Dict[SoilCategory, Dict[SoilConsistency, Dict[str, Any]]] = {

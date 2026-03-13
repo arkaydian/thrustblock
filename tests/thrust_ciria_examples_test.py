@@ -21,16 +21,17 @@ def create_thrust_block(
         width,
         length,
         depth,
-        user_effective_depth,
-        user_effective_height
+        key_height,
+        key_length
     ):
         return ThrustBlock(
             height=height,
             width=width,
             length=length,
             depth=depth,
-            user_effective_depth=user_effective_depth,
-            user_effective_height=user_effective_height
+            key_height=key_height,
+            key_length=key_length
+
         )
 
 
@@ -44,7 +45,7 @@ MediumDenseGravel = CoarseSoil(
             soil_passive_factor=3,
             soil_sliding_factor=2.25,
             soil_category=SoilCategory.COARSE,
-            thrust_block=create_thrust_block(height=1.8, width=3.5, length=2.5, depth=2.3, user_effective_depth=None, user_effective_height=None),
+            thrust_block=create_thrust_block(height=1.8, width=3.5, length=2.5, depth=2.3, key_height=None, key_length=None),
             friction_angle=33
         )
 
@@ -70,7 +71,7 @@ def test_taper_example():
         assert soil.coefficient_active_earth_pressure == pytest.approx(0.295, rel=1e-3)
         assert soil.net_unit_area_soil_pressure == pytest.approx(20.2, rel=1e-1)
         assert soil.sliding_resistance_base() == pytest.approx(9.3, rel=1e-1)
-        assert soil.sliding_resistance_side == pytest.approx(1.7, rel=1e-1)
+        assert soil.sliding_resistance_side() == pytest.approx(1.7, rel=1e-1)
         assert soil.area_passive_face == pytest.approx(6.3, rel=1e-1)
         assert soil.area_base_sliding == pytest.approx(8.8, rel=1e-1)
         assert soil.area_side_sliding == pytest.approx(4.5, rel=1e-1)
@@ -94,7 +95,7 @@ FirmClay = FineSoil(
             soil_passive_factor=3,
             soil_sliding_factor=2.25,
             soil_category=SoilCategory.FINE,
-            thrust_block=create_thrust_block(height=1.6, width=2.5, length=2.8, depth=2.1, user_effective_depth=None, user_effective_height=None),
+            thrust_block=create_thrust_block(height=1.6, width=2.5, length=2.8, depth=2.1, key_height=None, key_length=None),
             undrained_shear_strength=50
         )
 
@@ -118,7 +119,7 @@ def test_horizontal_bend():
         assert soil.undrained_shear_strength == pytest.approx(50, rel=1e-1)
         assert soil.net_unit_area_soil_pressure == pytest.approx(33.3, rel=1e-1)
         assert soil.sliding_resistance_base() == pytest.approx(22.2, rel=1e-1)
-        assert soil.sliding_resistance_side == pytest.approx(0, rel=1e-1)
+        assert soil.sliding_resistance_side() == pytest.approx(0, rel=1e-1)
         assert soil.area_passive_face == pytest.approx(4, rel=1e-1)
         assert soil.area_base_sliding == pytest.approx(7, rel=1e-1)
         assert soil.area_side_sliding == pytest.approx(0, rel=1e-1)
@@ -142,7 +143,7 @@ FirmClay = FineSoil(
             soil_passive_factor=3,
             soil_sliding_factor=2.25,
             soil_category=SoilCategory.FINE,
-            thrust_block=create_thrust_block(height=1.2, width=1.6, length=1.7, depth=2.2, user_effective_depth=None, user_effective_height=None),
+            thrust_block=create_thrust_block(height=1.2, width=1.6, length=1.7, depth=2.2, key_height=None, key_length=None),
             undrained_shear_strength=50
         )
 
@@ -167,7 +168,7 @@ def test_vertical_upturn_bend():
         assert soil.undrained_shear_strength == pytest.approx(50, rel=1e-1)
         assert soil.net_unit_area_soil_pressure == pytest.approx(33.3, rel=1e-1)
         assert soil.sliding_resistance_base() == pytest.approx(22.2, rel=1e-1)
-        assert soil.sliding_resistance_side == pytest.approx(0, rel=1e-1)
+        assert soil.sliding_resistance_side() == pytest.approx(0, rel=1e-1)
         assert soil.area_passive_face == pytest.approx(1.9, rel=1e-1)
         assert soil.area_base_sliding == pytest.approx(2.7, rel=1e-1)
         assert soil.area_side_sliding == pytest.approx(0, rel=1e-1)
@@ -188,7 +189,7 @@ FirmClay = FineSoil(
             soil_passive_factor=3,
             soil_sliding_factor=2.25,
             soil_category=SoilCategory.FINE,
-            thrust_block=create_thrust_block(height=2, width=3, length=4.5, depth=2.5, user_effective_depth=None, user_effective_height=None),
+            thrust_block=create_thrust_block(height=2, width=3, length=4.5, depth=2.5, key_height=None, key_length=None),
             undrained_shear_strength=40
         )
 
@@ -213,7 +214,7 @@ def test_vertical_downturn_bend():
         assert soil.undrained_shear_strength == pytest.approx(40, rel=1e-1)
         assert soil.net_unit_area_soil_pressure == pytest.approx(26.7, rel=1e-1)
         assert soil.sliding_resistance_base(True) == pytest.approx(0, rel=1e-1)
-        assert soil.sliding_resistance_side == pytest.approx(0, rel=1e-1)
+        assert soil.sliding_resistance_side() == pytest.approx(0, rel=1e-1)
         assert soil.area_passive_face == pytest.approx(6, rel=1e-1)
         assert soil.area_base_sliding == pytest.approx(13.5, rel=1e-1)
         assert soil.area_side_sliding == pytest.approx(0, rel=1e-1)
@@ -264,7 +265,7 @@ native_medium_dense_gravel = CoarseSoil(
             soil_passive_factor=3,
             soil_sliding_factor=2.25,
             soil_category=SoilCategory.COARSE,
-            thrust_block=create_thrust_block(height=2.35, width=4, length=3, depth=2.85, user_effective_depth=None, user_effective_height=None),
+            thrust_block=create_thrust_block(height=2.35, width=4, length=3, depth=2.85, key_height=None, key_length=None),
             friction_angle=33
         )
 
@@ -303,7 +304,7 @@ def test_metallic_flange_bend():
     if isinstance(flanged_metallic_pipe_example.soil_type, CoarseSoil):
         assert flanged_metallic_pipe_example.soil_type.net_unit_area_soil_pressure == pytest.approx(23, rel=1e-2)
         assert flanged_metallic_pipe_example.soil_type.sliding_resistance_base() == pytest.approx(10.9, rel=1e-2)
-        assert flanged_metallic_pipe_example.soil_type.sliding_resistance_side == pytest.approx(1.9, rel=1e-2)
+        assert flanged_metallic_pipe_example.soil_type.sliding_resistance_side() == pytest.approx(1.9, rel=1e-2)
         assert flanged_metallic_pipe_example.soil_type.area_passive_face == pytest.approx(9.4, rel=1e-2)
         assert flanged_metallic_pipe_example.soil_type.area_base_sliding == pytest.approx(12, rel=1e-2)
         assert flanged_metallic_pipe_example.soil_type.area_side_sliding == pytest.approx(7.1, rel=1e-2)

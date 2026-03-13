@@ -24,16 +24,16 @@ def _make_thrust_block(
     width: float = 1.5,
     length: float = 1.7,
     depth: float = 2.0,
-    user_effective_depth: float | None = None,
-    user_effective_height: float | None = None,
+    key_height: float | None = None,
+    key_length: float | None = None,
 ) -> ThrustBlock:
     return ThrustBlock(
         height=height,
         width=width,
         length=length,
         depth=depth,
-        user_effective_depth=user_effective_depth,
-        user_effective_height=user_effective_height,
+        key_height=key_height,
+        key_length=key_length,
     )
 
 
@@ -102,9 +102,9 @@ def test_coarse_soil_uses_effective_depth_and_height_in_calculations() -> None:
         soil_category=SoilType.SAND.category,
         thrust_block=_make_thrust_block(
             depth=2.0,
-            user_effective_depth=1.6,
+            key_height=1.6,
             height=1.2,
-            user_effective_height=1.0,
+            key_length=1.0,
         ),
         friction_angle=30,
     )

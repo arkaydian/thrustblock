@@ -51,20 +51,20 @@ class ThrustBlock(Concrete):
     width: float
     length: float
     depth: float
-    user_effective_depth: Optional[float]
-    user_effective_height: Optional[float]
+    key_height: Optional[float]
+    key_length: Optional[float]
     reinforced_concrete_unit_weight: float = 25
 
     def __post_init__(self):
         # Example validation
         if self.height <= 0:
-            raise ValueError("user_height must be positive")
+            raise ValueError("height must be positive")
         if self.width <= 0:
-            raise ValueError("user_width must be positive")
+            raise ValueError("width must be positive")
         if self.length <= 0:
-            raise ValueError("user_length must be positive")
+            raise ValueError("length must be positive")
         if self.depth <= 0:
-            raise ValueError("user_depth_block must be positive")
+            raise ValueError("depth_block must be positive")
         # if not isinstance(self.soil, Soil):
         #     raise TypeError("soil must be an instance of Soil or its subclass")
 
@@ -73,20 +73,25 @@ def create_thrust_block(
     width: float,
     length: float,
     depth: float,
-    user_effective_depth : float | None = None,
-    user_effective_height: float | None = None
+    key_height: Optional[float] = None,
+    key_length : Optional[float] = None,
 ) -> ThrustBlock:
     """
     Factory function to create a ThrustBlock instance with validation.
     """
+    if key_length == 0:
+        key_length = None
+    if key_height == 0:
+        key_height = None
     return ThrustBlock(
 
         height=height, 
         width=width, 
         length=length,
         depth=depth,
-        user_effective_depth=user_effective_depth,
-        user_effective_height=user_effective_height)
+        key_height=key_height,
+        key_length=key_length,
+)
 
 if __name__ == "__main__":
     ...

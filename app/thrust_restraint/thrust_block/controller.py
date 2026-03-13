@@ -96,6 +96,7 @@ pipe_outside_param = _is_equal_any(
     "Vertical Upturn Bend",
     "Blank End",
     "Closed Valve",
+    "Line Stop"
 )
 # bend_direction = vkt.Or(
 #     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Vertical Bend"),
@@ -116,66 +117,72 @@ friction_angle = coarse_soil_consistency
 ground_water_level = vkt.IsEqual(vkt.Lookup("soil_section.ground_condition"), "Below Water")
 
 # taper thrust arrangement visibility
-taper_thrust_arrangement_1 = vkt.And(
-    vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Taper Thrust"),
-    vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "1"),
-)
-taper_thrust_arrangement_2 = vkt.And(
-    vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Taper Thrust"),
-    vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "2"),
-)
+def is_taper_thrust_trenchless(params, **kwargs) -> bool:
+    return params.fitting_section.fitting_type == "Taper Thrust" \
+    and (params.block_section.depth or 0) - (params.block_section.height or 0) \
+    > (params.fitting_section.crown_depth or 0) + (params.fitting_section.outside_diameter_large or 0)
+
+def is_taper_thrust_trench(params, **kwargs) -> bool:
+    return params.fitting_section.fitting_type == "Taper Thrust" \
+    and (params.block_section.depth or 0) - (params.block_section.height or 0) \
+    < (params.fitting_section.crown_depth) + (params.fitting_section.outside_diameter_large or 0)
+
 # blank end arrangement visibility
 blank_end_arrangement_1 = vkt.And(
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Blank End"),
-    vkt.Or(vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "1"),
-           vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "2"),
     )
-)
 # closed valve arrangement visibility
-closed_valve_arrangement_1 = vkt.And(
-    vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Closed Valve"),
-    vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "1"),
-)
-closed_valve_arrangement_2 = vkt.And(
-    vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Closed Valve"),
-    vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "2"),
-)
+
+def is_closed_valve_trenchless(params, **kwargs) -> bool:
+    return params.fitting_section.fitting_type == "Closed Valve" \
+    and (params.block_section.depth or 0) - (params.block_section.height or 0) \
+    > (params.fitting_section.crown_depth) + (params.fitting_section.outside_diameter or 0) \
+    and params.block_section.is_key == "No"
+
+def is_closed_valve_trench(params, **kwargs) -> bool:
+    return params.fitting_section.fitting_type == "Closed Valve" \
+    and (params.block_section.depth or 0) - (params.block_section.height or 0) \
+    < (params.fitting_section.crown_depth) + (params.fitting_section.outside_diameter or 0)
+
+def is_closed_valve_trenchless_key(params, **kwargs) -> bool:
+    return params.fitting_section.fitting_type == "Closed Valve" \
+    and (params.block_section.depth or 0) - (params.block_section.height or 0) \
+    > (params.fitting_section.crown_depth) + (params.fitting_section.outside_diameter or 0) \
+    and params.block_section.is_key == "Yes"
+
 # tee arrangement visibility
 tee_arrangement_1 = vkt.And(
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Tee"),
-    vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "1"),
+    vkt.IsEqual(vkt.Lookup("block_section.is_key"), "No"),
 )
 tee_arrangement_2 = vkt.And(
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Tee"),
-    vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "2"),
+    vkt.IsEqual(vkt.Lookup("block_section.is_key"), "Yes"),
 )
 # vertical downturn arrangement visibility
 vertical_downturn_arrangement_1 = vkt.And(
-    vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Vertical Downturn Bend"),
-    vkt.Or(vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "1"),
-           vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "2"),
-    )
+    vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Vertical Downturn Bend")
 )
 # vertical upturn arrangement visibility
 vertical_upturn_arrangement_1 = vkt.And(
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Vertical Upturn Bend"),
-    vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "1"),
+    vkt.IsEqual(vkt.Lookup("block_section.is_key"), "No"),
 )
 vertical_upturn_arrangement_2 = vkt.And(
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Vertical Upturn Bend"),
-    vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "2"),
+    vkt.IsEqual(vkt.Lookup("block_section.is_key"), "Yes"),
 )
 # horizontal bend arrangement visibility
 horizontal_bend_arrangement_1 = vkt.And(
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Horizontal Bend"),
-    vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "1"),
+    vkt.IsEqual(vkt.Lookup("block_section.is_key"), "No"),
 )
 horizontal_bend_arrangement_2 = vkt.And(
     vkt.IsEqual(vkt.Lookup("fitting_section.fitting_type"), "Horizontal Bend"),
-    vkt.IsEqual(vkt.Lookup("block_section.arrangement"), "2"),
+    vkt.IsEqual(vkt.Lookup("block_section.is_key"), "Yes"),
 )
 
-
+key_visibility = _is_equal_any("block_section.is_key", "Yes")
 
 #--- ui logic ---
 
@@ -193,7 +200,7 @@ class Parametrization(vkt.Parametrization):
     fitting_section.outside_diameter_branch = vkt.NumberField("Branch Pipe outside diameter (m)", flex=40, visible=pipe_diameter_branch, default=0.63)
     fitting_section.angle = vkt.NumberField("Bend Radius (°)", flex=20, visible=bend_angle, default=45)
     # fitting_section.turn_direction = vkt.OptionField("Turn Direction", options=["upturn", "downturn"], flex=20, visible=bend_direction, default="downturn")
-    fitting_section.chainage = vkt.NumberField("Chainage", flex=40)
+    fitting_section.chainage = vkt.NumberField("Chainage", flex=40, default=0)
 
     # soil params 1
     soil_section = vkt.Section("Soil Type Parameters", initially_expanded=True)
@@ -201,7 +208,7 @@ class Parametrization(vkt.Parametrization):
     soil_section.coarse_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=coarse_consistency, visible=coarse_soil_consistency, default="Medium Dense", description="Refer to `Ciria816, Table 3.2` for `Soil Consistency`") #type: ignore
     soil_section.fine_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=fine_consistency, visible=fine_soil_consistency, default="Firm", description="Refer to `Ciria816, Table 3.2` for `Soil Consistency`") #type: ignore
     soil_section.friction_angle = vkt.NumberField("Friction Angle", flex=25, visible=friction_angle, default=33, step=0.1, max=max_soil_params, min=min_soil_params, description="Refer to `Ciria816, Table 3.2` for `Friction Angle`")
-    soil_section.undrained_shear_strength = vkt.NumberField("Undrained Shear Strength", flex=25, visible=undrained_shear_strength, default=50, step=0.1, max=max_soil_params, min=min_soil_params, description="Refer to `Ciria816, Table 3.2` for `Undrained Shear Strength`")
+    soil_section.undrained_shear_strength = vkt.NumberField("Undrained Shear Strength", flex=30, visible=undrained_shear_strength, default=50, step=0.1, max=max_soil_params, min=min_soil_params, description="Refer to `Ciria816, Table 3.2` for `Undrained Shear Strength`")
     soil_section.lb = vkt.LineBreak()
     soil_section.soil_passive_factor = vkt.NumberField("DFp", flex=10, default=3, max=max_passive_soil_displacement_factor, min=min_passive_soil_displacement_factor, description="Passive resistance displacement limitation factor - Table 3.6")
     soil_section.soil_sliding_factor = vkt.NumberField("DFs", flex=10, default=2.25, max=max_active_soil_displacement_factor, min=min_active_soil_displacement_factor, description="Sliding resistance displacement limitation factor - Table 3.6")
@@ -213,29 +220,27 @@ class Parametrization(vkt.Parametrization):
     # thrust block geometry
     block_section = vkt.Section("Thrust Block Parameters", initially_expanded=True)
     ## taper thrust arrangement images
-    block_section.taper_thrust_plan_1 = vkt.Image(path="taper_thrust_plan_1.png", align="left", flex=40, visible=taper_thrust_arrangement_1)
-    block_section.taper_thrust_section_1 = vkt.Image(path="taper_thrust_section_1.png", align="right", flex=40, visible=taper_thrust_arrangement_1)
-    block_section.taper_thrust_plan_2 = vkt.Image(path="taper_thrust_plan_2.png", align="left", flex=40, visible=taper_thrust_arrangement_2)
-    block_section.taper_thrust_section_2 = vkt.Image(path="taper_thrust_section_2.png", align="left", flex=40, visible=taper_thrust_arrangement_2)
+    block_section.taper_thrust_plan_1 = vkt.Image(path="taper_thrust_trench.png", align="left", flex=100, visible=is_taper_thrust_trench)
+    block_section.taper_thrust_plan_2 = vkt.Image(path="taper_thrust.png", align="left", flex=100, visible=is_taper_thrust_trenchless)
     ## blank end arrangement images
     block_section.blank_end_plan_1 = vkt.Image(path="blank_end_plan_1.png", align="left", flex=40, visible=blank_end_arrangement_1)
     block_section.blank_end_section_1 = vkt.Image(path="blank_end_section_1.png", align="right", flex=40, visible=blank_end_arrangement_1)
     # closed valve block arrangement
-    block_section.closed_valve_section_1 = vkt.Image(path="closed_valve_section_1.png", align="right", flex=40, visible=closed_valve_arrangement_1)
-    block_section.closed_valve_section_2 = vkt.Image(path="closed_valve_section_2.png", align="right", flex=40, visible=closed_valve_arrangement_2)
+    block_section.closed_valve_section_1 = vkt.Image(path="closed_valve_section_1.png", align="right", flex=100, visible=is_closed_valve_trenchless)
+    block_section.closed_valve_section_2 = vkt.Image(path="closed_valve_section_2.png", align="right", flex=100, visible=is_closed_valve_trench)
+    block_section.closed_valve_section_3 = vkt.Image(path="closed_valve_section_3.png", align="right", flex=100, visible=is_closed_valve_trenchless_key)
     # tee arrangement images
     block_section.tee_plan_1 = vkt.Image(path="tee_plan_1.png", align="left", flex=40, visible=tee_arrangement_1)
     block_section.tee_section_1 = vkt.Image(path="tee_section_1.png", align="right", flex=40, visible=tee_arrangement_1)
     block_section.tee_plan_2 = vkt.Image(path="tee_plan_2.png", align="left", flex=40, visible=tee_arrangement_2)
     block_section.tee_section_2 = vkt.Image(path="tee_section_2.png", align="left", flex=40, visible=tee_arrangement_2)
     # vertical downturn images
-    block_section.vertical_downturn_bend_section_1 = vkt.Image(path="vertical_downturn_bend_section_1.png", align="right", flex=40, visible=vertical_downturn_arrangement_1)
+    block_section.vertical_downturn_bend_section_1 = vkt.Image(path="vertical_downturn_bend.png", align="right", flex=100, visible=vertical_downturn_arrangement_1)
     # vertical upturn images
-    block_section.vertical_upturn_bend_section_1 = vkt.Image(path="vertical_upturn_bend_section_1.png", align="right", flex=40, visible=vertical_upturn_arrangement_1)
-    block_section.vertical_upturn_bend_section_2 = vkt.Image(path="vertical_upturn_bend_section_2.png", align="right", flex=40, visible=vertical_upturn_arrangement_2)
+    block_section.vertical_upturn_bend_section_1 = vkt.Image(path="vertical_upturn_bend.png", align="right", flex=100, visible=vertical_upturn_arrangement_1)
+    block_section.vertical_upturn_bend_section_2 = vkt.Image(path="vertical_upturn_bend_section_2.png", align="right", flex=80, visible=vertical_upturn_arrangement_2)
     # horizontal bend images
-    block_section.horizontal_bend_plan_1 = vkt.Image(path="horizontal_bend_plan_1.png", align="left", flex=40, visible=horizontal_bend_arrangement_1)
-    block_section.horizontal_bend_section_1 = vkt.Image(path="horizontal_bend_section_1.png", align="right", flex=40, visible=horizontal_bend_arrangement_1)
+    block_section.horizontal_bend_plan_1 = vkt.Image(path="horizontal_bend_plan_standard.png", align="left", flex=100, visible=horizontal_bend_arrangement_1)
     block_section.horizontal_bend_plan_2 = vkt.Image(path="horizontal_bend_plan_2.png", align="left", flex=40, visible=horizontal_bend_arrangement_2)
     block_section.horizontal_bend_section_2 = vkt.Image(path="horizontal_bend_section_2.png", align="left", flex=40, visible=horizontal_bend_arrangement_2)
     block_section.lb = vkt.LineBreak()
@@ -243,9 +248,13 @@ class Parametrization(vkt.Parametrization):
     block_section.width = vkt.NumberField("Thrust Block Width (W)", flex=25, default=3.5, step=0.1)
     block_section.length = vkt.NumberField("Thrust Block Length (L)", flex=25, default=2.5, step=0.1)
     block_section.depth = vkt.NumberField("Thrust Block Depth (Zb)", flex=25, default=2.3, step=0.1)
-    block_section.arrangement = vkt.OptionField("Block Arrangement", flex=20, options=["1", "2"], default="1") #type: ignore
     block_section.lb_2 = vkt.LineBreak()
-    block_section.download_excel = vkt.DownloadButton("Export to Excel", method="export_to_excel", flex=24)
+    block_section.is_key = vkt.OptionField("Thrust Block Key:", options=["Yes", "No"], default="No", variant="radio")
+    block_section.lb_3 = vkt.LineBreak()
+    block_section.key_height = vkt.NumberField("Height of Key", flex=30, default=0, visible=key_visibility)
+    block_section.key_length = vkt.NumberField("Length of Key", flex=30, default=0, visible=key_visibility)
+    block_section.lb_4 = vkt.LineBreak()
+    # block_section.download_excel = vkt.DownloadButton("Export to Excel", method="export_to_excel", flex=24)
 
 class ThrustBlockController(vkt.Controller):
     parametrization = Parametrization(width=40)
@@ -275,37 +284,241 @@ class ThrustBlockController(vkt.Controller):
             rows.append(row_html)
         return dims + "\n".join(rows)
     
-    def export_to_excel(self, params, **kwargs):
-        """Export the dimensions to an Excel file."""
-        # Create a new workbook and select the active sheet
-        template_path =  Path(__file__).parent.parent / 'arcadis_calculation_sheet_template.xlsx'
-        wb = load_workbook(template_path)
-        ws = wb["Thrust Block 1"]
+    # def export_to_excel(self, params, **kwargs):
+    #     """Export the dimensions to an Excel file."""
+    #     # Create a new workbook and select the active sheet
+    #     template_path =  Path(__file__).parent.parent / 'arcadis_calculation_sheet_template.xlsx'
+    #     wb = load_workbook(template_path)
+    #     ws = wb["Thrust Block 1"]
 
-        thrust_block = fitting_from_params(params=params)
+    #     thrust_block = fitting_from_params(params=params)
 
-        for i, entry in enumerate(thrust_block.fitting_workflow_res):
+    #     for i, entry in enumerate(thrust_block.fitting_workflow_res):
 
-            num = 7
-            # Add the dimension data
-            row = num + i
-            ws[f"A{row}"] = entry["label"]
-            ws[f"B{row}"] = entry["formula_xls"]
-            ws[f"F{row}"] = entry["output"]
-            ws[f"I{row}"] = entry["si_unit"]
-            ws[f"J{row}"] = entry["reference"]
+    #         num = 7
+    #         # Add the dimension data
+    #         row = num + i
+    #         ws[f"A{row}"] = entry["label"]
+    #         ws[f"B{row}"] = entry["formula_xls"]
+    #         ws[f"F{row}"] = entry["output"]
+    #         ws[f"I{row}"] = entry["si_unit"]
+    #         ws[f"J{row}"] = entry["reference"]
         
-        # Save the workbook to a file
-        from io import BytesIO
-        buffer = BytesIO()
-        wb.save(buffer)
-        buffer.seek(0)
+    #     # Save the workbook to a file
+    #     from io import BytesIO
+    #     buffer = BytesIO()
+    #     wb.save(buffer)
+    #     buffer.seek(0)
 
-        excel_file = vkt.File.from_data(buffer.read())
+    #     excel_file = vkt.File.from_data(buffer.read())
         
-        return vkt.DownloadResult(excel_file, 'dimensions.xlsx')
+    #     return vkt.DownloadResult(excel_file, 'dimensions.xlsx')
+
+    @vkt.WebView("Thrust Restraint Safety Checks")
+    def thrust_force_view(self, params, **kwargs):
+        """Render a card grid with dynamic color coding based on thrust force vs. block resistance."""
+
+        # Build one card per row in the DynamicArray
+
+        fitting_type = fitting_from_params(params=params)
+        cards_html = ""
+        for row in fitting_type.safety_report:
+            title = row["title"]
+            shot_title = row["shot_title"] 
+            shot = row["shot"]
+            goal_title = row["goal_title"] 
+            goal = row["goal"]
+            unit = row["unit"]
+
+            # Determine color and status: red if thrust exceeds resistance, green if safe
+            if shot > goal:
+                bg_color = "#4CAF50"        # green — block resistance holds (safe)
+                border_color = "#2E7D32"
+                status = "SAFE 🟢"
+                text_color = "#fff"
+                ratio_color = "#e0f5e0"
+            else:
+                bg_color = "#FF4D4D"        # red — thrust exceeds resistance (unsafe)
+                border_color = "#CC0000"
+                status = "UNSAFE 🔴"
+                text_color = "#fff"
+                ratio_color = "#ffe0e0"
+
+
+            # Compute utilisation ratio (thrust / resistance)
+            ratio = (shot / goal * 100) if goal > 0 else 0
+
+            cards_html += f"""
+            <div class="card" style="background-color:{bg_color}; border: 2px solid {border_color}; color:{text_color};">
+                <div class="card-name">{title}</div>
+                <div class="card-status">{status}</div>
+                <div class="card-divider"></div>
+                <div class="card-row">
+                    <div class="card-label">{shot_title}</div>
+                    <div class="card-value">{shot:.1f} {unit}</div>
+                </div>
+                <div class="card-row">
+                    <div class="card-label">{goal_title}</div>
+                    <div class="card-value">{goal:.1f} {unit}</div>
+                </div>
+                <div class="card-ratio" style="background-color:{ratio_color}; color:#333;">
+                    Utilisation: {ratio:.1f}%
+                </div>
+            </div>
+            """
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Thrust Force Checker</title>
+            <style>
+                * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+
+                body {{
+                    font-family: 'Segoe UI', sans-serif;
+                    background: #f4f6f9;
+                    padding: 32px;
+                }}
+
+                h1 {{
+                    font-size: 22px;
+                    color: #2c3e50;
+                    margin-bottom: 6px;
+                }}
+
+                .meta {{
+                    font-size: 14px;
+                    color: #666;
+                    margin-bottom: 28px;
+                }}
+
+                .meta span {{
+                    font-weight: 600;
+                    color: #333;
+                }}
+
+                .legend {{
+                    display: flex;
+                    gap: 20px;
+                    margin-bottom: 28px;
+                    flex-wrap: wrap;
+                }}
+
+                .legend-item {{
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    font-size: 13px;
+                    color: #444;
+                }}
+
+                .legend-dot {{
+                    width: 14px;
+                    height: 14px;
+                    border-radius: 50%;
+                    flex-shrink: 0;
+                }}
+
+                .grid {{
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+                    gap: 20px;
+                }}
+
+                .card {{
+                    border-radius: 12px;
+                    padding: 20px 16px;
+                    text-align: center;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+                    transition: transform 0.15s ease;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }}
+
+                .card:hover {{
+                    transform: translateY(-3px);
+                }}
+
+                .card-name {{
+                    font-size: 15px;
+                    font-weight: 700;
+                    letter-spacing: 0.3px;
+                }}
+
+                .card-status {{
+                    font-size: 13px;
+                    font-weight: 600;
+                    opacity: 0.95;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }}
+
+                .card-divider {{
+                    height: 1px;
+                    background: rgba(255,255,255,0.35);
+                    margin: 4px 0;
+                }}
+
+                .card-row {{
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    font-size: 13px;
+                    padding: 2px 0;
+                }}
+
+                .card-label {{
+                    opacity: 0.85;
+                    font-weight: 400;
+                }}
+
+                .card-value {{
+                    font-weight: 700;
+                    font-size: 14px;
+                }}
+
+                .card-ratio {{
+                    margin-top: 6px;
+                    border-radius: 8px;
+                    padding: 6px 10px;
+                    font-size: 13px;
+                    font-weight: 600;
+                }}
+
+                .empty {{
+                    color: #999;
+                    font-size: 15px;
+                    margin-top: 40px;
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>⚡ Safety Checks</h1>
+            <div class="meta">
+                Condition: <span>Criterion &gt; value → Unsafe</span>
+            </div>
+
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-dot" style="background:#4CAF50;"></div> Safe (Value ≤ Criterion)
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background:#FF4D4D;"></div> Unsafe (Criterion &gt; Value)
+                </div>
+            </div>
+
+            <div class="grid">
+                {cards_html if cards_html.strip() else '<p class="empty">No blocks defined yet. Add rows in the panel.</p>'}
+            </div>
+        </body>
+        </html>
+        """
+        return vkt.WebResult(html=html)
     
-    @vkt.WebView("Thrust Block Analysis Report")
+    @vkt.WebView("Thrust Restraint Calculation")
     def analyze_tb(self, params, **kwargs):
         """Generates a thrust stability check HTML report."""
 
@@ -411,6 +624,7 @@ class ThrustBlockController(vkt.Controller):
         """
         
         return vkt.WebResult(html=html)
+    
 
     @vkt.GeometryView("3D Arrangement (To be implemented)", duration_guess=1, x_axis_to_right=True)
     def visualize_thrust_block(self, params, **kwargs):

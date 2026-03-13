@@ -139,15 +139,15 @@ class Soil(ABC):
             raise ValueError("Thrust block is not defined.")
         return self.thrust_block
     
-    def _get_effective_depth(self) -> float:
+    def effective_height(self) -> float:
         """Get effective depth with fallback to actual depth."""
         tb = self._validate_thrust_block()
-        return tb.user_effective_depth if tb.user_effective_depth is not None else tb.depth
+        return tb.height + tb.key_height if tb.key_height is not None else tb.height
     
-    def _get_effective_height(self) -> float:
+    def effective_depth(self) -> float:
         """Get effective height with fallback to actual height."""
         tb = self._validate_thrust_block()
-        return tb.user_effective_height if tb.user_effective_height is not None else tb.height
+        return tb.depth + tb.key_height if tb.key_height is not None else tb.depth
     
     @property
     def effective_unit_weight(self) -> float:
@@ -198,7 +198,8 @@ class Soil(ABC):
         Raises ValueError if there is no thrust block.
         """
         tb = self._validate_thrust_block()
-        return tb.height * tb.width
+        return self.effective_height() * tb.width
+
     
     @property
     def area_base_sliding(self) -> float:
@@ -221,16 +222,17 @@ class Soil(ABC):
         Returns buoyancy coefficient in accordance with Section 3.5
         """
         tb = self._validate_thrust_block()
+        if self.water_condition == WaterCondition.ABOVE_WATER:
+            return 0
         return 1 - (self.ground_water_level / tb.depth)
     
-    def sliding_resistance_base(self, is_vertical_downturn: bool = False) -> float:
+    def sliding_resistance_base(self, is_vertical_downturn: bool = False, is_line_stop: bool = False) -> float:
         """
         Calculates Side sliding resistance in accordance with Section 3.7.1
         """
         raise NotImplementedError("Subclass for soil to implement `sliding_resistance_base`")
     
-    @property
-    def sliding_resistance_side(self) -> float:
+    def sliding_resistance_side(self, is_line_stop: bool = False) -> float:
         """
         Calculates Side sliding resistance in accordance with Section 3.7.2
         """
@@ -259,9 +261,7 @@ class CoarseSoil(Soil):
     friction_angle: float
 
     @property
-    def coefficient_passive_earth_pressure(
-        self,
-    ) -> float:
+    def coefficient_passive_earth_pressure(self) -> float:
         """
         Calculates passive earth pressure coefficient in accordance with Section 3.6.1.
         """
@@ -269,9 +269,7 @@ class CoarseSoil(Soil):
         return math.tan(math.radians(45 + (friction_angle / 2))) ** 2 
         
     @property
-    def coefficient_active_earth_pressure(
-        self,
-    ) -> float:
+    def coefficient_active_earth_pressure(self) -> float:
         """
         Calculates active earth pressure coefficient in accordance with Section 3.6.1.
         """
@@ -289,25 +287,30 @@ class CoarseSoil(Soil):
         Returns the sliding area per side of the thrust block dependant on soil category.
         """
         tb = self._validate_thrust_block()
-        return tb.height * tb.length
+        return self.effective_height() * tb.length
 
     
-    def sliding_resistance_base(self, is_vertical_downturn: bool = False) -> float:
+    def sliding_resistance_base(self, is_vertical_downturn: bool = False, is_line_stop: bool = False) -> float:
         """
         Calculates base sliding resistance in accordance with Section 3.7.1.
         """
         if is_vertical_downturn:
             return 0
-        depth = self._get_effective_depth()
+        tb = self._validate_thrust_block()
+        depth = self.effective_depth()
+        height = self.effective_height()
+        if is_line_stop:
+            return ((tb.reinforced_concrete_unit_weight - (self.buoyancy_coefficient * UNIT_WEIGHT_WATER)) * height * math.tan(math.radians(self.friction_angle))) / self.soil_sliding_factor
         return (self.effective_unit_weight * depth * math.tan(math.radians(self.friction_angle))) / self.soil_sliding_factor 
     
-    @property
-    def sliding_resistance_side(self) -> float:
+    def sliding_resistance_side(self, is_line_stop:bool = False) -> float:
         """
         Calculates Sliding Resistance for the soil block sides.
         """
-        depth = self._get_effective_depth()
-        height = self._get_effective_height()
+        if is_line_stop:
+            return 0
+        depth = self.effective_depth()
+        height = self.effective_height()
         return (self.effective_unit_weight * (depth - (height / 2)) * self.coefficient_active_earth_pressure 
                 * math.tan(math.radians(self.friction_angle))) / self.soil_sliding_factor
     
@@ -316,25 +319,27 @@ class CoarseSoil(Soil):
         """
         Calculates net unit area soil pressure for the soil block.
         """
-        depth_block_base = self._get_effective_depth()
-        height = self._get_effective_height()
+        depth_block_base = self.effective_depth()
+        height = self.effective_height()
         return (self.effective_unit_weight * (depth_block_base - (height / 2)) 
                 * (self.coefficient_passive_earth_pressure - self.coefficient_active_earth_pressure)) / self.soil_passive_factor
     
     @property
     def ultimate_vertical_bearing_capacity(self) -> float:
         tb = self._validate_thrust_block()
+        depth = self.effective_depth()
         return (0.5 * self.effective_unit_weight * self.bearing_capacity_coefficients.n_y * min(tb.length, tb.width) 
-                + self.effective_unit_weight * (self.bearing_capacity_coefficients.n_q - 1) * tb.depth)
+                + self.effective_unit_weight * (self.bearing_capacity_coefficients.n_q - 1) * depth)
     
     @property
     def soil_res(self) -> List[EngRes]:
         base_sliding = self.sliding_resistance_base()
-        side_sliding = self.sliding_resistance_side
+        side_sliding = self.sliding_resistance_side()
         net_pressure = self.net_unit_area_soil_pressure
         passive_area = self.area_passive_face
         base_area = self.area_base_sliding
         side_area = self.area_side_sliding
+        tb = self._validate_thrust_block()
 
         return [
             build_eng_res(
@@ -382,19 +387,24 @@ class CoarseSoil(Soil):
                 output=net_pressure,
                 si_unit="kN/m2",
                 formula_html=(
-                    f"σₚₐ = (γₛ − (C_GW × γ_W)) × (Z_b − H⁄2) × (K_p − K_a) "
-                    f"÷ DFₚ = {net_pressure:.2f} kN/m2"
+                    f"σₚₐ = (γₛ − (C_GW × γ_W)) × (Z_b − H⁄2) × (K_p − K_a)"
+                    f"÷ DFₚ = {net_pressure:.2f} kN/m2" if tb.key_height is None else 
+                    f"σₚₐ = (γₛ − (C_GW × γ_W)) × (Z_be − H_e⁄2) × (K_p − K_a)"
+                    f"÷ DFₚ = {net_pressure:.2f}"
                 ),
-                formula_xls="σ_pa = (γ_s – (C_GW - γ_W)) x (Z_b – H/2) x (K_p – K_a) ÷ DF_P",
+                formula_xls="σ_pa = (γ_s – (C_GW - γ_W)) x (Z_b – H/2) x (K_p – K_a) ÷ DF_P" if tb.key_height is None else "σ_pa = (γ_s – (C_GW - γ_W)) x (Z_be – H_e/2) x (K_p – K_a) ÷ DF_P",
                 reference="Section 3.6.1",
             ),
             build_eng_res(
                 label="Base sliding resistance",
                 output=base_sliding,
                 si_unit="kN/m2",
-                formula_html=f"τ_b = (γ_s − (C_GW × γ_W)) × Z_b × tan(Φ′) ÷ DF_s = {base_sliding:.2f} kN/m2",
-                formula_xls="τ_b = (γ_s – (C_GW - γ_W)) x (Z_b – H/2) x tan(Φ') ÷ DF_s",
-                reference="Section 3.7.1",
+                formula_html=(
+                    f"τ_b = (γ_s − (C_GW × γ_W)) × Z_b × tan(Φ′) ÷ DF_s = {base_sliding:.2f} kN/m2" if tb.key_height is None else
+                    f"τ_b = (γ_s − (C_GW × γ_W)) × Z_be × tan(Φ′) ÷ DF_s = {base_sliding:.2f} kN/m2"
+                ),
+                formula_xls="τ_b = (γ_s – (C_GW - γ_W)) x (Z_b – H/2) x tan(Φ') ÷ DF_s" if tb.key_height is None else "τ_b = (γ_s – (C_GW - γ_W)) x (Z_be – H_e/2) x tan(Φ') ÷ DF_s",
+                reference="Section 3.7.1"
             ),
             build_eng_res(
                 label="Side sliding resistance",
@@ -402,6 +412,8 @@ class CoarseSoil(Soil):
                 si_unit="kN/m2",
                 formula_html=(
                     f"τₛ = (γₛ − (C_GW × γ_W)) × (Z_b − H⁄2) × Kₐ × tan(Φ′) "
+                    f"÷ DFₛ = {side_sliding:.2f} kN/m2" if tb.key_height is None else
+                    f"τₛ = (γₛ − (C_GW × γ_W)) × (Z_be − H_e⁄2) × Kₐ × tan(Φ′) "
                     f"÷ DFₛ = {side_sliding:.2f} kN/m2"
                 ),
                 formula_xls="τ_s = (γ_s – (C_GW - γ_W)) x (Z_b – H/2) x  K_a ÷ DF_s",
@@ -411,7 +423,7 @@ class CoarseSoil(Soil):
                 label="Passive face area",
                 output=passive_area,
                 si_unit="kN/m2",
-                formula_html=f"A_f = H × W = {passive_area:.2f} m2",
+                formula_html=f"A_f = H × W = {passive_area:.2f} m2" if tb.key_height is None else f"A_f = H_e × W = {passive_area:.2f} m2",
                 formula_xls="A_f = H x W",
                 reference=" - ",
             ),
@@ -427,8 +439,8 @@ class CoarseSoil(Soil):
                 label="Sliding area per side",
                 output=side_area,
                 si_unit="m2",
-                formula_html=f"Aₛ = L × W = {side_area:.2f} m2",
-                formula_xls="A_f = H x L",
+                formula_html=f"Aₛ = H × L = {side_area:.2f} m2" if tb.key_height is None else f"Aₛ = H_e × L = {side_area:.2f} m2",
+                formula_xls="A_f = H x L" if tb.key_height is None else "A_f = H_e x L",
                 reference=" - ",
             ),
         ]
@@ -444,16 +456,6 @@ class FineSoil(Soil):
     #             f"SoilConsistency '{self.soil_consistency.label}' is not valid for soil type '{self.soil_type.label}' ({self.soil_type.category.name.lower()})"
     #         )
 
-    def report_dimensions(self) -> List[ReportRow]: 
-        return [
-            ("Depth below ground to highest groundwater level", f"Z<sub>GW</sub> = {self.ground_water_level} m"),
-            ("Native soil type", f"{self.soil_consistency.label} {self.soil_type.label}"),
-            ("Native soil unit weight", f"γ<sub>s</sub> {self.unit_weight} kN/m3,"),
-            ("Groundwater unit weight", f"γ<sub>W</sub> {UNIT_WEIGHT_WATER} kN/m3,"),
-            ("Undrained shear strength", f"C<sub>u</sub> =  {self.undrained_shear_strength}"),
-            ("Passive resistance displacement limitation factor", f"DF<sub>p</sub> = {self.soil_passive_factor}"),
-            ("Sliding resistance displacement limitation factor", f"DF<sub>s</sub> {self.soil_sliding_factor}"),
-        ]
     @property
     def area_side_sliding(self) -> float:
         """
@@ -461,7 +463,7 @@ class FineSoil(Soil):
         """
         return 0
 
-    def sliding_resistance_base(self, is_vertical_downturn: bool = False) -> float:
+    def sliding_resistance_base(self, is_vertical_downturn: bool = False, is_line_stop: bool = False) -> float:
         """
         Calculates base sliding resistance in accordance with Section 3.7.1.
         """
@@ -469,8 +471,7 @@ class FineSoil(Soil):
             return 0
         return self.undrained_shear_strength / self.soil_sliding_factor
     
-    @property
-    def sliding_resistance_side(self) -> float:
+    def sliding_resistance_side(self, is_line_stop: bool = False) -> float:
         """
         Calculates Sliding Resistance for the soil block sides.
         """
@@ -497,6 +498,7 @@ class FineSoil(Soil):
         passive_area = self.area_passive_face
         base_area = self.area_base_sliding
         side_area = self.area_side_sliding
+        tb = self._validate_thrust_block()
 
         return [
             build_eng_res(
@@ -535,15 +537,15 @@ class FineSoil(Soil):
                 label="Base sliding resistance",
                 output=base_sliding,
                 si_unit="kN/m2",
-                formula_html=f"τ_b = Cᵤ ÷ DFₚ = {base_sliding:.2f} kN/m2",
-                formula_xls="τ_b = (γ_s – (C_GW - γ_W)) x (Z_b – H/2) x tan(Φ') ÷ DF_s",
+                formula_html=f"τ_b = Cᵤ ÷ DF_s = {base_sliding:.2f} kN/m2",
+                formula_xls="τ_b = Cᵤ ÷ DF_s",
                 reference="Section 3.7.1",
             ),
             build_eng_res(
                 label="Passive face area",
                 output=passive_area,
                 si_unit="kN/m2",
-                formula_html=f"A_f = H × W = {passive_area:.2f}",
+                formula_html=f"A_f = H × W = {passive_area:.2f}" if tb.key_height is None else f"A_f = H_e × W = {passive_area:.2f}",
                 formula_xls="A_f = H * W",
                 reference="",
             ),
@@ -559,7 +561,7 @@ class FineSoil(Soil):
                 label="Sliding area per side",
                 output=side_area,
                 si_unit="m2",
-                formula_html=f"Aₛ = L × W = {side_area:.2f}",
+                formula_html=f"Aₛ = H × L = {side_area:.2f}" if tb.key_height is None else f"Aₛ = H_e × W = {side_area:.2f}",
                 formula_xls="A_f = H x L",
                 reference="",
             ),
@@ -836,13 +838,18 @@ SOIL_REGISTRY: Dict[SoilType, SoilBuilder] = {}
 
 def build_thrust_block_from_params(params: Any) -> ThrustBlock:
     tb = params.block_section
+    key_height = None
+    key_length = None
+    if tb.is_key == "Yes":
+        key_height = tb.key_height
+        key_length = tb.key_length
     return ThrustBlock(
         height=tb.height,
         width=tb.width,
         length=tb.length,
         depth=tb.depth,
-        user_effective_depth=None,
-        user_effective_height=None
+        key_height=key_height,
+        key_length=key_length,
     )
 
 def register_soil(*soil_types: SoilType):

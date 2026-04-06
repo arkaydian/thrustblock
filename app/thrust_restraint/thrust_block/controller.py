@@ -7,6 +7,7 @@ from app.civeng1.soils.soil_mechanics import SoilType, SoilConsistency, SoilCate
 import base64
 from pathlib import Path
 from openpyxl import load_workbook
+import app
 
 #--- utils ---
 fitting_list = FITTING_LABELS
@@ -182,6 +183,8 @@ horizontal_bend_arrangement_2 = vkt.And(
     vkt.IsEqual(vkt.Lookup("block_section.is_key"), "Yes"),
 )
 
+line_stop_arrangement = _is_equal_any("fitting_section.fitting_type", "Line Stop")
+
 key_visibility = _is_equal_any("block_section.is_key", "Yes")
 
 #--- ui logic ---
@@ -243,6 +246,8 @@ class Parametrization(vkt.Parametrization):
     block_section.horizontal_bend_plan_1 = vkt.Image(path="horizontal_bend_plan_standard.png", align="left", flex=100, visible=horizontal_bend_arrangement_1)
     block_section.horizontal_bend_plan_2 = vkt.Image(path="horizontal_bend_plan_2.png", align="left", flex=40, visible=horizontal_bend_arrangement_2)
     block_section.horizontal_bend_section_2 = vkt.Image(path="horizontal_bend_section_2.png", align="left", flex=40, visible=horizontal_bend_arrangement_2)
+    # linestop image
+    block_section.line_stop_section = vkt.Image(path="line_stop.png", align="left", flex=100, visible=line_stop_arrangement)
     block_section.lb = vkt.LineBreak()
     block_section.height = vkt.NumberField("Thrust Block Height (H)", flex=25, default=1.8, step=0.1)
     block_section.width = vkt.NumberField("Thrust Block Width (W)", flex=25, default=3.5, step=0.1)
@@ -313,6 +318,15 @@ class ThrustBlockController(vkt.Controller):
     #     excel_file = vkt.File.from_data(buffer.read())
         
     #     return vkt.DownloadResult(excel_file, 'dimensions.xlsx')
+
+    @vkt.WebView("Plan and Section View")   # Decorator: renders the return value as an HTML/SVG web view
+    def view_svg(self, params, **kwargs):
+        """Render the SVG plan view for the selected fitting type."""
+        fitting_type = params.fitting_type   # Read the selected fitting type from the dropdown
+
+        # Read user-defined canvas size, falling back to sensible defaults if empty
+        canvas_w = 1100   # SVG canvas width in pixels
+        canvas_h = 420    # SVG canvas height in pixels
 
     @vkt.WebView("Thrust Restraint Safety Checks")
     def thrust_force_view(self, params, **kwargs):
@@ -503,7 +517,7 @@ class ThrustBlockController(vkt.Controller):
 
             <div class="legend">
                 <div class="legend-item">
-                    <div class="legend-dot" style="background:#4CAF50;"></div> Safe (Value ≤ Criterion)
+                    <div class="legend-dot" style="background:#4CAF50;"></div> Safe (Value > Criterion)
                 </div>
                 <div class="legend-item">
                     <div class="legend-dot" style="background:#FF4D4D;"></div> Unsafe (Criterion &gt; Value)

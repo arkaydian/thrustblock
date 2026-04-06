@@ -618,7 +618,7 @@ class VerticalUpturnBendThrustBlock(FittingCalculation):
             {
                 "title": "Vertical Ground Bearing Resistance",
                 "shot_title": "Ultimate Ground Bearing Resistance",
-                "shot": self.soil_type.ultimate_vertical_bearing_capacity,
+                "shot": self.vertical_block_resistance_force,
                 "goal_title": "Thrust Force (T_z)",
                 "goal": self.thrust_force_vertical,
                 "unit": "kN"
@@ -1407,6 +1407,27 @@ class LineStopThrustBlock(FittingCalculation):
         ]
         return fitting_dims + self.thrust_block_standard_workflow + self.soil_type.soil_res + thrust_pass_through_res \
         + self.over_turning_stability_check_workflow
+    
+    @property
+    def safety_report(self):
+        return [
+            {
+                "title": "Thrust Pass Through Check",
+                "shot_title": "Block Resistance R_s",
+                "shot": self.block_resistance,
+                "goal_title": "Thrust Force (T)",
+                "goal": self.thrust_force_resultant,
+                "unit": "kN"
+            },
+            {
+                "title": "Overturning Stability Check",
+                "shot_title": "Safety Factor against Overturning",
+                "shot": self.safety_factor_against_overturning,
+                "goal_title": "Safety Factor",
+                "goal": 1.5,
+                "unit": ""
+            },
+        ]
 
 
 @dataclass(frozen=True)

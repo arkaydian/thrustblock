@@ -104,12 +104,11 @@ def test_coarse_soil_uses_effective_depth_and_height_in_calculations() -> None:
             depth=2.0,
             key_height=1.6,
             height=1.2,
-            key_length=1.0,
         ),
         friction_angle=30,
     )
 
-    expected_base = (soil.effective_unit_weight * 1.6 * math.tan(math.radians(30))) / 2.0
+    expected_base = (soil.effective_unit_weight * 2 * math.tan(math.radians(30))) / 2.0
     assert soil.sliding_resistance_base() == pytest.approx(expected_base)
 
     expected_net_pressure = (

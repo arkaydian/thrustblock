@@ -463,7 +463,7 @@ class AnchorBlockController(vkt.Controller):
 
             <div class="legend">
                 <div class="legend-item">
-                    <div class="legend-dot" style="background:#4CAF50;"></div> Safe (Value ≤ Criterion)
+                    <div class="legend-dot" style="background:#4CAF50;"></div> Safe (Value > Criterion)
                 </div>
                 <div class="legend-item">
                     <div class="legend-dot" style="background:#FF4D4D;"></div> Unsafe (Criterion &gt; Value)

@@ -12,7 +12,7 @@ from openpyxl.styles import Font, Alignment
 
 
 class Controller(vkt.Controller):
-    label = "Root"
+    label = "ThrustRoot"
     children = ["Project"]  # Allow MyFolder entities at top level
     show_children_as = "Cards"
 

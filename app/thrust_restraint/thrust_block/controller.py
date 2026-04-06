@@ -7,7 +7,7 @@ from app.civeng1.soils.soil_mechanics import SoilType, SoilConsistency, SoilCate
 import base64
 from pathlib import Path
 from openpyxl import load_workbook
-import app
+import app.utils
 
 #--- utils ---
 fitting_list = FITTING_LABELS

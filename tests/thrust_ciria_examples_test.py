@@ -40,11 +40,11 @@ def create_thrust_block(
 MediumDenseGravel = CoarseSoil(
             soil_type=SoilType.GRAVEL,
             soil_consistency=SoilConsistency.MEDIUM_DENSE,
-            water_condition=WaterCondition.BELOW_WATER,
             ground_water_level=0.8,
             soil_passive_factor=3,
             soil_sliding_factor=2.25,
             soil_category=SoilCategory.COARSE,
+            soil_unit_weight=None,
             thrust_block=create_thrust_block(height=1.8, width=3.5, length=2.5, depth=2.3, key_height=None, key_length=None),
             friction_angle=33
         )
@@ -90,11 +90,11 @@ def test_taper_example():
 FirmClay = FineSoil(
             soil_type=SoilType.CLAY,
             soil_consistency=SoilConsistency.FIRM,
-            water_condition=WaterCondition.BELOW_WATER,
             ground_water_level=0.8,
             soil_passive_factor=3,
             soil_sliding_factor=2.25,
             soil_category=SoilCategory.FINE,
+            soil_unit_weight=None,
             thrust_block=create_thrust_block(height=1.6, width=2.5, length=2.8, depth=2.1, key_height=None, key_length=None),
             undrained_shear_strength=50
         )
@@ -138,11 +138,11 @@ def test_horizontal_bend():
 FirmClay = FineSoil(
             soil_type=SoilType.CLAY,
             soil_consistency=SoilConsistency.FIRM,
-            water_condition=WaterCondition.BELOW_WATER,
             ground_water_level=0.8,
             soil_passive_factor=3,
             soil_sliding_factor=2.25,
             soil_category=SoilCategory.FINE,
+            soil_unit_weight=None,
             thrust_block=create_thrust_block(height=1.2, width=1.6, length=1.7, depth=2.2, key_height=None, key_length=None),
             undrained_shear_strength=50
         )
@@ -184,11 +184,11 @@ def test_vertical_upturn_bend():
 FirmClay = FineSoil(
             soil_type=SoilType.CLAY,
             soil_consistency=SoilConsistency.FIRM,
-            water_condition=WaterCondition.BELOW_WATER,
             ground_water_level=0.8,
             soil_passive_factor=3,
             soil_sliding_factor=2.25,
             soil_category=SoilCategory.FINE,
+            soil_unit_weight=None,
             thrust_block=create_thrust_block(height=2, width=3, length=4.5, depth=2.5, key_height=None, key_length=None),
             undrained_shear_strength=40
         )
@@ -260,11 +260,11 @@ coarse_embedment = CoarseEmbedment(
 native_medium_dense_gravel = CoarseSoil(
             soil_type=SoilType.GRAVEL,
             soil_consistency=SoilConsistency.MEDIUM_DENSE,
-            water_condition=WaterCondition.BELOW_WATER,
             ground_water_level=0.8,
             soil_passive_factor=3,
             soil_sliding_factor=2.25,
             soil_category=SoilCategory.COARSE,
+            soil_unit_weight=None,
             thrust_block=create_thrust_block(height=2.35, width=4, length=3, depth=2.85, key_height=None, key_length=None),
             friction_angle=33
         )

@@ -52,11 +52,11 @@ pe_pipe = WeldedPePipe(
 native_medium_dense_gravel = CoarseSoil(
             soil_type=SoilType.SAND,
             soil_consistency=SoilConsistency.LOOSE,
-            water_condition=WaterCondition.BELOW_WATER,
             ground_water_level=0.8,
             soil_passive_factor=5,
             soil_sliding_factor=3,
             soil_category=SoilCategory.COARSE,
+            soil_unit_weight=None,
             thrust_block=create_thrust_block(height=1.4, width=4, length=5, depth=1.6786, key_height=None, key_length=None),
             friction_angle=28
         )
@@ -122,11 +122,11 @@ def test_metallic_flange_bend():
 taper_medium_dense_gravel = CoarseSoil(
             soil_type=SoilType.SAND,
             soil_consistency=SoilConsistency.LOOSE,
-            water_condition=WaterCondition.BELOW_WATER,
             ground_water_level=0.8,
             soil_passive_factor=5,
             soil_sliding_factor=3,
             soil_category=SoilCategory.COARSE,
+            soil_unit_weight=None,
             thrust_block=create_thrust_block(height=2, width=3.5, length=2.2, depth=1.98, key_height=None, key_length=None),
             friction_angle=28
         )
@@ -172,11 +172,11 @@ def test_taper_example():
 horizontal_bend_medium_dense_gravel = CoarseSoil(
             soil_type=SoilType.SAND,
             soil_consistency=SoilConsistency.LOOSE,
-            water_condition=WaterCondition.BELOW_WATER,
             ground_water_level=0.8,
             soil_passive_factor=5,
             soil_sliding_factor=3,
             soil_category=SoilCategory.COARSE,
+            soil_unit_weight=None,
             thrust_block=create_thrust_block(height=1.8, width=1.9, length=1.8, depth=1.811, key_height=None, key_length=None),
             friction_angle=28
         )

@@ -81,10 +81,6 @@ def get_soil_consistency(user_input: str) -> SoilConsistency:
     """Get SoilConsistency enum from string (delegates to SoilConsistency.from_string)."""
     return SoilConsistency.from_string(user_input)
 
-def get_water_condition(condition: str) -> WaterCondition:
-    """Get WaterCondition enum from string (delegates to WaterCondition.from_string)."""
-    return WaterCondition.from_string(condition)
-
 def get_embedment_key(user_key: str) -> str:
     """Convert user-friendly compaction class string to dictionary key."""
     key = user_key.strip()
@@ -126,11 +122,11 @@ def interpolate_bearing_coefficients(
 class Soil(ABC):
     soil_type: SoilType
     soil_consistency: SoilConsistency
-    water_condition: WaterCondition
     ground_water_level: float
     soil_passive_factor: float
     soil_sliding_factor: float
     soil_category: SoilCategory
+    soil_unit_weight: Optional[float]
     thrust_block: Optional[ThrustBlock]
 
     def _validate_thrust_block(self) -> ThrustBlock:
@@ -138,6 +134,14 @@ class Soil(ABC):
         if self.thrust_block is None:
             raise ValueError("Thrust block is not defined.")
         return self.thrust_block
+    
+    @property
+    def water_condition(self) -> WaterCondition:
+        tb = self._validate_thrust_block()
+        if tb.depth > self.ground_water_level:
+            return WaterCondition.BELOW_WATER
+        else:
+            return WaterCondition.ABOVE_WATER
     
     def effective_height(self) -> float:
         """Get effective depth with fallback to actual depth."""
@@ -156,14 +160,17 @@ class Soil(ABC):
 
     @property
     def unit_weight(self) -> float:
-        try:
-            return SOIL_UNIT_WEIGHT[self.soil_type][self.soil_consistency][self.water_condition]
-        except KeyError as e:
-            raise SoilLookupError(
-                f"Unit weight not found for soil_type={self.soil_type.label}, "
-                f"consistency={self.soil_consistency.label}, "
-                f"water_condition={self.water_condition.name}"
-            ) from e
+        if self.soil_unit_weight is None:
+            try:
+                return SOIL_UNIT_WEIGHT[self.soil_type][self.soil_consistency][self.water_condition]
+            except KeyError as e:
+                raise SoilLookupError(
+                    f"Unit weight not found for soil_type={self.soil_type.label}, "
+                    f"consistency={self.soil_consistency.label}, "
+                    f"water_condition={self.water_condition.name}"
+                ) from e
+        else:
+            return self.soil_unit_weight
 
     # @property
     # def design_class(self) -> SoilDesignClass:
@@ -215,8 +222,8 @@ class Soil(ABC):
         Returns the sliding area per side of the thrust block in respective to soil category type
         """
         raise NotImplementedError("Subclass for soil to implement `area_side_sliding`")
-        
-    @property    
+    
+    @property
     def buoyancy_coefficient(self) -> float:
         """
         Returns buoyancy coefficient in accordance with Section 3.5
@@ -843,11 +850,19 @@ def build_thrust_block_from_params(params: Any) -> ThrustBlock:
     if tb.is_key == "Yes":
         key_height = tb.key_height
         key_length = tb.key_length
+    depth = tb.depth
+    if tb.is_depth_custom == "No":
+        if params.fitting_section.fitting_type == "Taper Thrust":
+            depth = params.fitting_section.crown_depth + params.fitting_section.outside_diameter_large /2 + tb.height/2
+        if params.fitting_section.fitting_type == "Taper Thrust":
+            depth = params.fitting_section.crown_depth + params.fitting_section.outside_diameter_branch /2 + tb.height/2
+        else:
+            depth = params.fitting_section.crown_depth + params.fitting_section.outside_diameter /2 + tb.height/2
     return ThrustBlock(
         height=tb.height,
         width=tb.width,
         length=tb.length,
-        depth=tb.depth,
+        depth=depth,
         key_height=key_height,
         key_length=key_length,
     )
@@ -865,22 +880,22 @@ def build_coarse_soil(
     *,
     soil_type: SoilType,
     soil_consistency: SoilConsistency,
-    water_condition: WaterCondition,
     ground_water_level: float,
     soil_passive_factor: float,
     soil_sliding_factor: float,
+    soil_unit_weight: Optional[float],
     thrust_block: Optional[ThrustBlock],
     friction_angle: float
 ) -> Soil:
     return CoarseSoil(
         soil_type=soil_type,
         soil_consistency=soil_consistency,
-        water_condition=water_condition,
         ground_water_level=ground_water_level,
         soil_passive_factor=soil_passive_factor,
         soil_sliding_factor=soil_sliding_factor,
         soil_category=SoilCategory.COARSE,
         thrust_block=thrust_block,
+        soil_unit_weight=soil_unit_weight,
         friction_angle=friction_angle,
     )
 
@@ -889,21 +904,21 @@ def build_fine_soil(
     *,
     soil_type: SoilType,
     soil_consistency: SoilConsistency,
-    water_condition: WaterCondition,
     ground_water_level: float,
     soil_passive_factor: float,
     soil_sliding_factor: float,
+    soil_unit_weight: Optional[float],
     thrust_block: Optional[ThrustBlock],
     undrained_shear_strength: float,
 ) -> Soil:
     return FineSoil(
         soil_type=soil_type,
         soil_consistency=soil_consistency,
-        water_condition=water_condition,
         ground_water_level=ground_water_level,
         soil_passive_factor=soil_passive_factor,
         soil_sliding_factor=soil_sliding_factor,
         soil_category=SoilCategory.FINE,
+        soil_unit_weight=soil_unit_weight,
         thrust_block=thrust_block,
         undrained_shear_strength=undrained_shear_strength,
     )
@@ -915,22 +930,26 @@ def create_soil(params: Any, section_name: SectionName = "soil_section") -> Soil
         raise ValueError(f"{section_name!r} not found on params")
     
     soil_type = get_soil_type(s.soil_type)
-    water_condition = get_water_condition(s.ground_condition)
 
     try:
         builder = SOIL_REGISTRY[soil_type]
     except KeyError as e:
         raise ValueError(f"No registered builder for soil type: {soil_type.label}") from e
+    
+    if s.is_custom_unit_weight == "Yes":
+        soil_unit_weight = s.soil_unit_weight
+    else:
+        soil_unit_weight = None
 
     # Common parameters for all soil types
     common_params = dict(
         soil_type=soil_type,
-        water_condition=water_condition,
         ground_water_level=s.groundwater_level,
         soil_passive_factor=s.soil_passive_factor,
         soil_sliding_factor=s.soil_sliding_factor,
+        soil_unit_weight = soil_unit_weight,
         thrust_block=build_thrust_block_from_params(params)
-    )
+        )
 
     # Dispatch based on which builder is selected
     if builder is build_coarse_soil:

@@ -63,8 +63,9 @@ class ThrustBlock(Concrete):
             raise ValueError("width must be positive")
         if self.length <= 0:
             raise ValueError("length must be positive")
-        if self.depth <= 0:
-            raise ValueError("depth_block must be positive")
+        if self.depth is not None:
+            if self.depth <= 0:
+                raise ValueError("depth_block must be positive")
         # if not isinstance(self.soil, Soil):
         #     raise TypeError("soil must be an instance of Soil or its subclass")
 

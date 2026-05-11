@@ -7,7 +7,9 @@ from app.civeng1.soils.soil_mechanics import SoilType, SoilConsistency, SoilCate
 import base64
 from pathlib import Path
 from openpyxl import load_workbook
-import app.utils
+from app.utils.svgwriter import (build_socket_pipe_svg, build_taper_thrust_svg, 
+                                 build_taper_thrust_section_svg, build_horizontal_bend, 
+                                 build_horizontal_bend_section_svg, build_vertical_upturn_bend_section_svg)
 
 #--- utils ---
 fitting_list = FITTING_LABELS
@@ -187,44 +189,47 @@ line_stop_arrangement = _is_equal_any("fitting_section.fitting_type", "Line Stop
 
 key_visibility = _is_equal_any("block_section.is_key", "Yes")
 
+depth_visibility = _is_equal_any("block_section.is_depth_custom", "Yes")
+
+unit_weight_visibility = _is_equal_any("soil_section.is_custom_unit_weight", "Yes")
+
 #--- ui logic ---
 
 class Parametrization(vkt.Parametrization):
     # fitting logic
     fitting_section = vkt.Section('Fitting Type Parameters', initially_expanded=True)
-    fitting_section.fitting_type = vkt.OptionField('Select fitting type', flex=35, options=fitting_list, default="Taper Thrust") #type: ignore
-    fitting_section.crown_depth = vkt.NumberField('Depth to Pipe Crown (m)', flex=30, default=1) #type: ignore
-    fitting_section.maximum_design_pressure = vkt.NumberField('Maximum Design Pressure (kPa)', flex=35, default=1200) #type: ignore
+    fitting_section.fitting_type = vkt.OptionField('Fitting Type', flex=35, options=fitting_list, default="Taper Thrust") #type: ignore
+    fitting_section.crown_depth = vkt.NumberField('Z_O', flex=15, default=1, description="Depth to Pipe Crown (m)")
+    fitting_section.maximum_design_pressure = vkt.NumberField('P', flex=20, default=1200, description="Maximum Design Pressure (kPa)") #type: ignore
     fitting_section.lb_2 = vkt.LineBreak()
-    fitting_section.outside_diameter = vkt.NumberField("Pipe outside diameter (m)", flex=35, visible=pipe_outside_param, default=0.8)
-    fitting_section.outside_diameter_large = vkt.NumberField("Pipe outside diameter – larger end (m)", flex=40, visible=pipe_outside_larger_end, default=0.63)
-    fitting_section.outside_diameter_small = vkt.NumberField("Pipe outside diameter – smaller end (m)", flex=40, visible=pipe_outside_smaller_end, default=0.43)
-    fitting_section.outside_diameter_main = vkt.NumberField("Pipe outside diameter – main (m)", flex=40, visible=pipe_diameter_main, default=0.43)
-    fitting_section.outside_diameter_branch = vkt.NumberField("Branch Pipe outside diameter (m)", flex=40, visible=pipe_diameter_branch, default=0.63)
+    fitting_section.outside_diameter = vkt.NumberField("D_O", flex=15, visible=pipe_outside_param, default=0.8, description="Pipe outside diameter (m)")
+    fitting_section.outside_diameter_large = vkt.NumberField("D_O_A", flex=18, visible=pipe_outside_larger_end, default=0.63, description="Pipe outside diameter – larger end (m)")
+    fitting_section.outside_diameter_small = vkt.NumberField("D_O_B", flex=18, visible=pipe_outside_smaller_end, default=0.43, description="Pipe outside diameter – smaller end (m)")
+    fitting_section.outside_diameter_main = vkt.NumberField("D_O_M", flex=18, visible=pipe_diameter_main, default=0.43, description="Pipe outside diameter – main (m)")
+    fitting_section.outside_diameter_branch = vkt.NumberField("D_O_B", flex=18, visible=pipe_diameter_branch, default=0.63, description="Pipe outside diameter – main (m)")
     fitting_section.angle = vkt.NumberField("Bend Radius (°)", flex=20, visible=bend_angle, default=45)
     # fitting_section.turn_direction = vkt.OptionField("Turn Direction", options=["upturn", "downturn"], flex=20, visible=bend_direction, default="downturn")
-    fitting_section.chainage = vkt.NumberField("Chainage", flex=40, default=0)
+    fitting_section.chainage = vkt.NumberField("Ch", flex=15, default=0, description="Chainage")
 
     # soil params 1
     soil_section = vkt.Section("Soil Type Parameters", initially_expanded=True)
-    soil_section.soil_type = vkt.OptionField("Soil Type", flex=18, options=soil_list, default="Gravel") #type: ignore
-    soil_section.coarse_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=coarse_consistency, visible=coarse_soil_consistency, default="Medium Dense", description="Refer to `Ciria816, Table 3.2` for `Soil Consistency`") #type: ignore
-    soil_section.fine_soil_consistency = vkt.OptionField("Soil Consistency", flex=25, options=fine_consistency, visible=fine_soil_consistency, default="Firm", description="Refer to `Ciria816, Table 3.2` for `Soil Consistency`") #type: ignore
-    soil_section.friction_angle = vkt.NumberField("Friction Angle", flex=25, visible=friction_angle, default=33, step=0.1, max=max_soil_params, min=min_soil_params, description="Refer to `Ciria816, Table 3.2` for `Friction Angle`")
-    soil_section.undrained_shear_strength = vkt.NumberField("Undrained Shear Strength", flex=30, visible=undrained_shear_strength, default=50, step=0.1, max=max_soil_params, min=min_soil_params, description="Refer to `Ciria816, Table 3.2` for `Undrained Shear Strength`")
+    soil_section.soil_type = vkt.OptionField("Type", flex=20, options=soil_list, default="Gravel") #type: ignore
+    soil_section.coarse_soil_consistency = vkt.OptionField("Consistency", flex=35, options=coarse_consistency, visible=coarse_soil_consistency, default="Medium Dense", description="Refer to `Ciria816, Table 3.2` for `Soil Consistency`") #type: ignore
+    soil_section.fine_soil_consistency = vkt.OptionField("Consistency", flex=35, options=fine_consistency, visible=fine_soil_consistency, default="Firm", description="Refer to `Ciria816, Table 3.2` for `Soil Consistency`") #type: ignore
+    soil_section.friction_angle = vkt.NumberField("Φ'", flex=12, visible=friction_angle, default=33, step=0.1, max=max_soil_params, min=min_soil_params, description="Native soil effective angle of shearing resistance. Refer to`Ciria816, Table 3.2` for `Friction Angle`")
+    soil_section.undrained_shear_strength = vkt.NumberField("C_u", flex=15, visible=undrained_shear_strength, default=50, step=0.1, max=max_soil_params, min=min_soil_params, description="Undrained Shear Strength- Refer to `Ciria816, Table 3.2` for `Undrained Shear Strength`")
     soil_section.lb = vkt.LineBreak()
-    soil_section.soil_passive_factor = vkt.NumberField("DFp", flex=10, default=3, max=max_passive_soil_displacement_factor, min=min_passive_soil_displacement_factor, description="Passive resistance displacement limitation factor - Table 3.6")
-    soil_section.soil_sliding_factor = vkt.NumberField("DFs", flex=10, default=2.25, max=max_active_soil_displacement_factor, min=min_active_soil_displacement_factor, description="Sliding resistance displacement limitation factor - Table 3.6")
+    soil_section.soil_passive_factor = vkt.NumberField("DFp", flex=15, default=3, max=max_passive_soil_displacement_factor, min=min_passive_soil_displacement_factor, description="Passive resistance displacement limitation factor - Table 3.6")
+    soil_section.soil_sliding_factor = vkt.NumberField("DFs", flex=15, default=2.25, max=max_active_soil_displacement_factor, min=min_active_soil_displacement_factor, description="Sliding resistance displacement limitation factor - Table 3.6")
     # soil params 2
     soil_section.lb_2 = vkt.LineBreak()
-    soil_section.ground_condition = vkt.OptionField("Ground Condition", flex=18, options=["Above Water", "Below Water"], default="Below Water") #type: ignore
-    soil_section.groundwater_level = vkt.NumberField("Ground level depth (m)", flex=25, visible=ground_water_level, default=0.8)
+    soil_section.is_custom_unit_weight = vkt.OptionField("Use Custom γₛ Values", flex=45, options=["Yes", "No"], default="No", variant="radio-inline") #type: ignore
+    soil_section.lb_3 = vkt.LineBreak()
+    soil_section.groundwater_level = vkt.NumberField("Z_GW", flex=18, visible=ground_water_level, default=0.8, description="Ground Water Depth (m)")
+    soil_section.soil_unit_weight = vkt.NumberField("γₛ", flex=18, visible=unit_weight_visibility, default=18, description="Native soil unit weight (kN/m3)")
     
     # thrust block geometry
     block_section = vkt.Section("Thrust Block Parameters", initially_expanded=True)
-    ## taper thrust arrangement images
-    block_section.taper_thrust_plan_1 = vkt.Image(path="taper_thrust_trench.png", align="left", flex=100, visible=is_taper_thrust_trench)
-    block_section.taper_thrust_plan_2 = vkt.Image(path="taper_thrust.png", align="left", flex=100, visible=is_taper_thrust_trenchless)
     ## blank end arrangement images
     block_section.blank_end_plan_1 = vkt.Image(path="blank_end_plan_1.png", align="left", flex=40, visible=blank_end_arrangement_1)
     block_section.blank_end_section_1 = vkt.Image(path="blank_end_section_1.png", align="right", flex=40, visible=blank_end_arrangement_1)
@@ -249,20 +254,20 @@ class Parametrization(vkt.Parametrization):
     # linestop image
     block_section.line_stop_section = vkt.Image(path="line_stop.png", align="left", flex=100, visible=line_stop_arrangement)
     block_section.lb = vkt.LineBreak()
-    block_section.height = vkt.NumberField("Thrust Block Height (H)", flex=25, default=1.8, step=0.1)
-    block_section.width = vkt.NumberField("Thrust Block Width (W)", flex=25, default=3.5, step=0.1)
-    block_section.length = vkt.NumberField("Thrust Block Length (L)", flex=25, default=2.5, step=0.1)
-    block_section.depth = vkt.NumberField("Thrust Block Depth (Zb)", flex=25, default=2.3, step=0.1)
+    block_section.is_depth_custom = vkt.OptionField("Custom Depth (Z_b):", flex=35, options=["Yes", "No"], default= "No", variant="radio-inline")
     block_section.lb_2 = vkt.LineBreak()
-    block_section.is_key = vkt.OptionField("Thrust Block Key:", options=["Yes", "No"], default="No", variant="radio")
+    block_section.height = vkt.NumberField("H", flex=15, default=1.8, step=0.1, description="Thrust Block Height (m)")
+    block_section.width = vkt.NumberField("W", flex=15, default=3.5, step=0.1, description="Thrust Block Width (m)")
+    block_section.length = vkt.NumberField("L", flex=15, default=2.5, step=0.1, description="Thrust Block Length (m)")
+    block_section.depth = vkt.NumberField("Z_b", flex=15, default=2.3, step=0.1, visible=depth_visibility, description="Thrust Block Depth (m)")
     block_section.lb_3 = vkt.LineBreak()
-    block_section.key_height = vkt.NumberField("Height of Key", flex=30, default=0, visible=key_visibility)
-    block_section.key_length = vkt.NumberField("Length of Key", flex=30, default=0, visible=key_visibility)
+    block_section.is_key = vkt.OptionField("Thrust Block Key:", options=["Yes", "No"], default="No", variant="radio-inline")
     block_section.lb_4 = vkt.LineBreak()
-    # block_section.download_excel = vkt.DownloadButton("Export to Excel", method="export_to_excel", flex=24)
+    block_section.key_height = vkt.NumberField("H_key", flex=15, default=0, visible=key_visibility, description="Height of key")
+    block_section.key_length = vkt.NumberField("L_key", flex=15, default=0, visible=key_visibility, description="Length of Key")
 
 class ThrustBlockController(vkt.Controller):
-    parametrization = Parametrization(width=40)
+    parametrization = Parametrization(width=25)
 
     def render_workflow_html(self, params):
         fitting_type = fitting_from_params(params=params)
@@ -319,15 +324,6 @@ class ThrustBlockController(vkt.Controller):
         
     #     return vkt.DownloadResult(excel_file, 'dimensions.xlsx')
 
-    @vkt.WebView("Plan and Section View")   # Decorator: renders the return value as an HTML/SVG web view
-    def view_svg(self, params, **kwargs):
-        """Render the SVG plan view for the selected fitting type."""
-        fitting_type = params.fitting_type   # Read the selected fitting type from the dropdown
-
-        # Read user-defined canvas size, falling back to sensible defaults if empty
-        canvas_w = 1100   # SVG canvas width in pixels
-        canvas_h = 420    # SVG canvas height in pixels
-
     @vkt.WebView("Thrust Restraint Safety Checks")
     def thrust_force_view(self, params, **kwargs):
         """Render a card grid with dynamic color coding based on thrust force vs. block resistance."""
@@ -381,6 +377,46 @@ class ThrustBlockController(vkt.Controller):
             </div>
             """
 
+                    # Read user-defined canvas size, falling back to sensible defaults if empty
+        canvas_w = 600   # SVG canvas width in pixels
+        canvas_h = 300    # SVG canvas height in pixels
+        depth_crown = params.fitting_section.crown_depth * 1000
+        gw_level = params.soil_section.groundwater_level * 1000
+        height = params.block_section.height * 1000
+        width = params.block_section.width * 1000
+        length = params.block_section.length * 1000
+
+        if params.block_section.is_depth_custom == "No":
+            block_depth = (params.fitting_section.crown_depth + params.fitting_section.outside_diameter /2 + params.block_section.height/2) * 1000
+        else:
+            block_depth = params.block_section.depth * 1000
+
+        if params.fitting_section.fitting_type == "Blank End":
+            od = params.fitting_section.outside_diameter * 1000
+            svg = build_socket_pipe_svg(od, canvas_w, canvas_h)
+            svg_section = ""
+        elif params.fitting_section.fitting_type == "Taper Thrust":
+            if params.block_section.is_depth_custom == "No":
+                block_depth = (params.fitting_section.crown_depth + params.fitting_section.outside_diameter_large /2 + params.block_section.height/2) * 1000
+            else:
+                block_depth = block_depth = params.block_section.depth * 1000
+            od_large = params.fitting_section.outside_diameter_large * 1000
+            od_small = params.fitting_section.outside_diameter_small * 1000
+            svg = build_taper_thrust_svg(height, width, length, od_large, od_small, canvas_w, canvas_h)
+            svg_section = build_taper_thrust_section_svg(height, width, length, block_depth, gw_level, od_large, depth_crown, canvas_w, canvas_h)
+        elif params.fitting_section.fitting_type == "Horizontal Bend":
+            od = params.fitting_section.outside_diameter * 1000
+            angle = params.fitting_section.angle
+            svg = build_horizontal_bend(height, width, length, block_depth, gw_level, od, depth_crown, 0 - angle/2, angle, canvas_w, canvas_h)
+            svg_section = build_horizontal_bend_section_svg(height, width, length, block_depth, gw_level, od, depth_crown, canvas_w, canvas_h)
+        elif params.fitting_section.fitting_type == "Vertical Upturn Bend":
+            od = params.fitting_section.outside_diameter * 1000
+            angle = params.fitting_section.angle
+            svg = build_vertical_upturn_bend_section_svg(height, width, length, block_depth, gw_level, od, depth_crown, 90, angle, canvas_w, canvas_h)
+            svg_section = None
+        else:
+            svg = ""
+            svg_section = ""
         html = f"""
         <!DOCTYPE html>
         <html>
@@ -507,6 +543,20 @@ class ThrustBlockController(vkt.Controller):
                     font-size: 15px;
                     margin-top: 40px;
                 }}
+                .container {{
+                background: white;
+                padding: 24px;
+                border-radius: 8px;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.12);   /* Subtle card shadow */
+                }}
+                .drawings-row {{
+                    display: flex;
+                    flex-direction: row;
+                    align-items: flex-start;
+                    gap: 16px;
+                    margin-bottom: 28px;
+                    width: fit-content;
+                }}
             </style>
         </head>
         <body>
@@ -514,7 +564,14 @@ class ThrustBlockController(vkt.Controller):
             <div class="meta">
                 Condition: <span>Criterion &gt; value → Unsafe</span>
             </div>
-
+            <div class="drawings-row">
+                <div class="container"> 
+                {svg} 
+                </div>
+                <div class="container"> 
+                {svg_section} 
+                </div>
+            </div>
             <div class="legend">
                 <div class="legend-item">
                     <div class="legend-dot" style="background:#4CAF50;"></div> Safe (Value > Criterion)
@@ -640,30 +697,30 @@ class ThrustBlockController(vkt.Controller):
         return vkt.WebResult(html=html)
     
 
-    @vkt.GeometryView("3D Arrangement (To be implemented)", duration_guess=1, x_axis_to_right=True)
-    def visualize_thrust_block(self, params, **kwargs):
-        """Generate 3D visualization of the concrete thrust block."""
-        # Extract dimensions from user inputs
-        height = params.block_section.height
-        length = params.block_section.length
-        width = params.block_section.width
+    # @vkt.GeometryView("3D Arrangement (To be implemented)", duration_guess=1, x_axis_to_right=True)
+    # def visualize_thrust_block(self, params, **kwargs):
+    #     """Generate 3D visualization of the concrete thrust block."""
+    #     # Extract dimensions from user inputs
+    #     height = params.block_section.height
+    #     length = params.block_section.length
+    #     width = params.block_section.width
         
-        # Create the thrust block as a rectangular extrusion
-        # Define the base point at origin
-        base_point = vkt.Point(0, 0, 0)
+    #     # Create the thrust block as a rectangular extrusion
+    #     # Define the base point at origin
+    #     base_point = vkt.Point(0, 0, 0)
         
-        # Create a vertical line representing the height of the block
-        vertical_line = vkt.Line(base_point, vkt.Point(0, 0, height))
+    #     # Create a vertical line representing the height of the block
+    #     vertical_line = vkt.Line(base_point, vkt.Point(0, 0, height))
         
-        # Create concrete material with typical gray color
-        concrete_material = vkt.Material('Concrete', color=vkt.Color(169, 169, 169))
+    #     # Create concrete material with typical gray color
+    #     concrete_material = vkt.Material('Concrete', color=vkt.Color(169, 169, 169))
         
-        # Create the rectangular thrust block using RectangularExtrusion
-        thrust_block = vkt.RectangularExtrusion(
-            width=width,
-            height=length,
-            line=vertical_line,
-            material=concrete_material
-        )
+    #     # Create the rectangular thrust block using RectangularExtrusion
+    #     thrust_block = vkt.RectangularExtrusion(
+    #         width=width,
+    #         height=length,
+    #         line=vertical_line,
+    #         material=concrete_material
+    #     )
         
-        return vkt.GeometryResult(thrust_block)
+    #     return vkt.GeometryResult(thrust_block)

@@ -25,6 +25,7 @@ def _taper_params() -> SimpleNamespace:
             fine_soil_consistency="Firm",
             ground_condition="Below Water",
             groundwater_level=0.8,
+            is_custom_unit_weight=False,
             soil_passive_factor=3.0,
             soil_sliding_factor=2.25,
             friction_angle=30,
@@ -35,6 +36,7 @@ def _taper_params() -> SimpleNamespace:
             width=3.5,
             length=2.5,
             depth=2.3,
+            is_depth_custom="Yes",
             is_key = "No"
         ),
     )
@@ -81,6 +83,7 @@ def _horizontal_bend_params() -> SimpleNamespace:
             fine_soil_consistency="Firm",
             ground_condition="Below Water",
             groundwater_level=0.8,
+            is_custom_unit_weight=False,
             soil_passive_factor=3.0,
             soil_sliding_factor=2.25,
             friction_angle=30,
@@ -91,6 +94,7 @@ def _horizontal_bend_params() -> SimpleNamespace:
             width=1.0,
             length=1.8,
             depth=2.0,
+            is_depth_custom="Yes",
             is_key = "No"
         ),
     )

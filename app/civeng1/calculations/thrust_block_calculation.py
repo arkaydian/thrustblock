@@ -56,6 +56,10 @@ class FittingCalculation(ABC):
     soil_type: Soil
 
     @property
+    def depth(self) -> float:
+        raise NotImplementedError("Subclass must implement this `thrust_force_resultant`")
+
+    @property
     def thrust_force_resultant(self) -> float:
         raise NotImplementedError("Subclass must implement this `thrust_force_resultant`")
 
@@ -128,7 +132,7 @@ class FittingCalculation(ABC):
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
         return (self.soil_type.unit_weight - (self.soil_type.buoyancy_coefficient * UNIT_WEIGHT_WATER)) * \
-            self.soil_type.thrust_block.depth * self.soil_type.thrust_block.width * self.soil_type.thrust_block.length
+            self.depth* self.soil_type.thrust_block.width * self.soil_type.thrust_block.length
 
     @property
     def block_restoring_moment(self) -> float:
@@ -333,6 +337,15 @@ class HorizontalBendThrustBlock(FittingCalculation):
         return 0
     
     @property
+    def depth(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth is None:
+            return self.crown_depth - self.outside_diameter / 2 + self.soil_type.thrust_block.height / 2
+        return self.soil_type.thrust_block.depth
+            
+    
+    @property
     def overturning_level_arm(self) -> float:
         """
         Calculates the overturning lever arm for the thrust block based on fitting geometry.
@@ -487,6 +500,14 @@ class VerticalUpturnBendThrustBlock(FittingCalculation):
         if self.block_resistance > self.thrust_force_horizontal:
             return True
         return False
+    
+    @property
+    def depth(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth is None:
+            return self.crown_depth - self.outside_diameter / 2 + self.soil_type.thrust_block.height / 2
+        return self.soil_type.thrust_block.depth
 
     @property
     def fitting_workflow_res(self) -> List[EngRes]:
@@ -655,6 +676,14 @@ class VerticalDownturnBendThrustBlock(FittingCalculation):
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
         return 1.5 * self.outside_diameter * self.soil_type.thrust_block.height
+    
+    @property
+    def depth(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth is None:
+            return self.crown_depth - self.outside_diameter / 2 + self.soil_type.thrust_block.height / 2
+        return self.soil_type.thrust_block.depth
     
     @property    
     def buoyancy_coefficient(self) -> float:
@@ -1001,6 +1030,14 @@ class TeeThrustBlock(FittingCalculation):
         return self.maximum_design_pressure * area_branch
     
     @property
+    def depth(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth is None:
+            return self.crown_depth - self.outside_diameter / 2 + self.soil_type.thrust_block.height / 2
+        return self.soil_type.thrust_block.depth
+    
+    @property
     def area_disturbed_passive(self) -> float:
         return 0
     
@@ -1070,6 +1107,14 @@ class AngleBranchThrustBlock(FittingCalculation):
         # if isinstance(self.fitting, VerticalBend):
         #     return self.fitting.thrust_force_horizontal() * self.overturning_level_arm
         return self.thrust_force_resultant * self.overturning_level_arm
+    
+    @property
+    def depth(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth is None:
+            return self.crown_depth - self.outside_diameter_branch / 2 + self.soil_type.thrust_block.height / 2
+        return self.soil_type.thrust_block.depth
     
     @property
     def overturning_level_arm(self) -> float:
@@ -1156,13 +1201,21 @@ class ClosedValveThrustBlock(FittingCalculation):
         return self.maximum_design_pressure * area
     
     @property
+    def depth(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth is None:
+            return self.crown_depth - self.outside_diameter / 2 + self.soil_type.thrust_block.height / 2
+        return self.soil_type.thrust_block.depth
+    
+    @property
     def area_disturbed_passive(self) -> float:
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
-        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.outside_diameter:
+        if self.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.outside_diameter:
             return 0
         return 1.5 * self.component.outside_diameter \
-            * (self.soil_type.thrust_block.height + self.component.outside_diameter + self.crown_depth - self.soil_type.thrust_block.depth)
+            * (self.soil_type.thrust_block.height + self.component.outside_diameter + self.crown_depth - self.depth)
     
     @property
     def overturning_level_arm(self) -> float:
@@ -1172,7 +1225,7 @@ class ClosedValveThrustBlock(FittingCalculation):
         """
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
-        return self.soil_type.thrust_block.depth - (self.crown_depth + self.component.outside_diameter / 2)
+        return self.depth - (self.crown_depth + self.component.outside_diameter / 2)
     
     @property
     def fitting_workflow_res(self) -> List[EngRes]:
@@ -1239,13 +1292,21 @@ class LineStopThrustBlock(FittingCalculation):
         return self.maximum_design_pressure * area
     
     @property
+    def depth(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth is None:
+            return self.crown_depth - self.outside_diameter / 2 + self.soil_type.thrust_block.height / 2
+        return self.soil_type.thrust_block.depth
+    
+    @property
     def area_disturbed_passive(self) -> float:
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
-        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.outside_diameter:
+        if self.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.outside_diameter:
             return 0
         return 1.5 * self.component.outside_diameter \
-            * (self.soil_type.thrust_block.height + self.component.outside_diameter + self.crown_depth - self.soil_type.thrust_block.depth)
+            * (self.soil_type.thrust_block.height + self.component.outside_diameter + self.crown_depth - self.depth)
     
     @property
     def block_resistance(self) -> float:
@@ -1261,7 +1322,7 @@ class LineStopThrustBlock(FittingCalculation):
         """
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
-        return self.soil_type.thrust_block.depth - (self.crown_depth + self.component.outside_diameter / 2)
+        return self.depth - (self.crown_depth + self.component.outside_diameter / 2)
     
     @property
     def vertical_reaction_block(self) -> float:
@@ -1442,10 +1503,18 @@ class BlankEndThrustBlock(FittingCalculation):
         return self.maximum_design_pressure * area
     
     @property
+    def depth(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth is None:
+            return self.crown_depth - self.outside_diameter / 2 + self.soil_type.thrust_block.height / 2
+        return self.soil_type.thrust_block.depth
+    
+    @property
     def area_disturbed_passive(self) -> float:
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
-        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.outside_diameter:
+        if self.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.outside_diameter:
             return 0
         return 1.5 * self.outside_diameter \
             * (self.soil_type.thrust_block.height + self.outside_diameter + self.crown_depth - self.soil_type.thrust_block.depth)
@@ -1527,10 +1596,18 @@ class TaperThrustThrustBlock(FittingCalculation):
         return self.maximum_design_pressure * (area_large - area_small)
     
     @property
+    def depth(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth is None:
+            return self.crown_depth - self.outside_diameter / 2 + self.soil_type.thrust_block.height / 2
+        return self.soil_type.thrust_block.depth
+    
+    @property
     def area_disturbed_passive(self) -> float:
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
-        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.outside_diameter_large:
+        if self.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.outside_diameter_large:
             return 0
         return 1.5 * self.outside_diameter_large \
             * (self.soil_type.thrust_block.height + self.outside_diameter_large + self.crown_depth - self.soil_type.thrust_block.depth)
@@ -1613,16 +1690,24 @@ class FlangedMetallicPipeThrustBlock(FittingCalculation):
     component: FlangedMetallicPipe
 
     @property
+    def depth(self) -> float:
+        if self.soil_type.thrust_block is None:
+            raise ValueError("Thrust Block not implemented")
+        if self.soil_type.thrust_block.depth is None:
+            return self.crown_depth - self.outside_diameter / 2 + self.soil_type.thrust_block.height / 2
+        return self.soil_type.thrust_block.depth
+
+    @property
     def buoyancy_coefficient(self):
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
-        return 1 - (self.soil_type.ground_water_level / self.soil_type.thrust_block.depth)
+        return 1 - (self.soil_type.ground_water_level / self.depth)
     
     @property
     def area_disturbed_passive(self):
         if self.soil_type.thrust_block is None:
             raise ValueError("Thrust Block not implemented")
-        if self.soil_type.thrust_block.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.embedment_type.pipe.outside_diameter:
+        if self.depth - self.soil_type.thrust_block.height > self.crown_depth + self.component.embedment_type.pipe.outside_diameter:
             return 0
         return 1.5 * self.embedment_type.pipe.outside_diameter \
             * (self.soil_type.thrust_block.height + self.embedment_type.pipe.outside_diameter + self.embedment_type.pipe.crown_depth - self.soil_type.thrust_block.depth)

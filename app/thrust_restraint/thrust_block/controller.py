@@ -220,7 +220,7 @@ class Parametrization(vkt.Parametrization):
     soil_section.undrained_shear_strength = vkt.NumberField("C_u", flex=15, visible=undrained_shear_strength, default=50, step=0.1, max=max_soil_params, min=min_soil_params, description="Undrained Shear Strength- Refer to `Ciria816, Table 3.2` for `Undrained Shear Strength`")
     soil_section.lb = vkt.LineBreak()
     soil_section.soil_passive_factor = vkt.NumberField("DFp", flex=15, default=3, max=max_passive_soil_displacement_factor, min=min_passive_soil_displacement_factor, description="Passive resistance displacement limitation factor - Table 3.6")
-    soil_section.soil_sliding_factor = vkt.NumberField("DFs", flex=15, default=2.25, max=max_active_soil_displacement_factor, min=min_active_soil_displacement_factor, description="Sliding resistance displacement limitation factor - Table 3.6")
+    soil_section.soil_sliding_factor = vkt.NumberField("DFs", flex=15, default=2.25, max=max_active_soil_displacement_factor, min=min_active_soil_displacement_factor, description="Sliding resistance displacement limitation factor - Table 3.8")
     # soil params 2
     soil_section.lb_2 = vkt.LineBreak()
     soil_section.is_custom_unit_weight = vkt.OptionField("Use Custom γₛ Values", flex=45, options=["Yes", "No"], default="No", variant="radio-inline") #type: ignore

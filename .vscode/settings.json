@@ -1,0 +1,20 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd /home/hbkayo/python/civeng/thrustblock/app/utils && python3 svgwriter\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd /home/hbkayo/python/civeng/thrustblock && python3 -m py_compile app/utils/svgwriter\\.py && python3 app/utils/svgwriter\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd /home/hbkayo/python/civeng/thrustblock && source \\.venv-1/bin/activate && python -m pytest -q tests/svgwriter_test\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd /home/hbkayo/python/civeng/thrustblock && source \\.venv-1/bin/activate && python - <<'PY'\nfrom importlib\\.util import module_from_spec, spec_from_file_location\nfrom pathlib import Path\nmodule_path = Path\\('app/utils/svgwriter\\.py'\\)\\.resolve\\(\\)\nspec = spec_from_file_location\\('svgwriter_module', module_path\\)\nsvgwriter = module_from_spec\\(spec\\)\nspec\\.loader\\.exec_module\\(svgwriter\\)\nsvg = svgwriter\\.build_horizontal_bend\\(block_height=1\\.0, block_width=1\\.0, block_length=1\\.0, block_depth=0\\.5, gw_level=0\\.2, od=0\\.222, depth_crown=0\\.8, start_angle=0\\.0, angle=45\\.0, canvas_w=400, canvas_h=300\\)\nprint\\('rect count', svg\\.count\\('<rect'\\)\\)\nprint\\('polygon count', svg\\.count\\('<polygon'\\)\\)\nfor line in svg\\.splitlines\\(\\):\n    if '<rect' in line or '<polygon' in line:\n        print\\(line\\)\nPY$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

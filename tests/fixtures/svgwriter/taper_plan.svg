@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+<path d="M 187.30,157.22 L 197.94,158.42 L 208.05,156.32 L 218.16,158.02 L 229.33,156.72 L 240.50,157.22" stroke="#333333" stroke-width="1.60" fill="none"/>
+<path d="M 187.30,242.78 L 197.94,241.68 L 208.05,243.58 L 218.16,242.08 L 229.33,243.18 L 240.50,242.78" stroke="#333333" stroke-width="1.60" fill="none"/>
+<path d="M 359.50,157.22 L 370.14,156.22 L 380.25,158.12 L 390.36,156.52 L 401.53,157.72 L 412.70,157.22" stroke="#333333" stroke-width="1.60" fill="none"/>
+<path d="M 359.50,242.78 L 370.14,243.88 L 380.25,241.88 L 390.36,243.48 L 401.53,242.38 L 412.70,242.78" stroke="#333333" stroke-width="1.60" fill="none"/>
+<line x1="196.88" y1="149.22" x2="203.88" y2="142.22" stroke="#333333" stroke-width="2.00"/>
+<line x1="204.88" y1="149.22" x2="211.88" y2="142.22" stroke="#333333" stroke-width="2.00"/>
+<line x1="212.88" y1="149.22" x2="219.88" y2="142.22" stroke="#333333" stroke-width="2.00"/>
+<line x1="220.88" y1="149.22" x2="227.88" y2="142.22" stroke="#333333" stroke-width="2.00"/>
+<line x1="195.81" y1="250.78" x2="202.81" y2="257.78" stroke="#333333" stroke-width="2.00"/>
+<line x1="203.81" y1="250.78" x2="210.81" y2="257.78" stroke="#333333" stroke-width="2.00"/>
+<line x1="211.81" y1="250.78" x2="218.81" y2="257.78" stroke="#333333" stroke-width="2.00"/>
+<line x1="219.81" y1="250.78" x2="226.81" y2="257.78" stroke="#333333" stroke-width="2.00"/>
+<line x1="388.76" y1="149.22" x2="395.76" y2="142.22" stroke="#333333" stroke-width="2.00"/>
+<line x1="396.76" y1="149.22" x2="403.76" y2="142.22" stroke="#333333" stroke-width="2.00"/>
+<line x1="404.76" y1="149.22" x2="411.76" y2="142.22" stroke="#333333" stroke-width="2.00"/>
+<line x1="412.76" y1="149.22" x2="419.76" y2="142.22" stroke="#333333" stroke-width="2.00"/>
+<line x1="389.29" y1="250.78" x2="396.29" y2="257.78" stroke="#333333" stroke-width="2.00"/>
+<line x1="397.29" y1="250.78" x2="404.29" y2="257.78" stroke="#333333" stroke-width="2.00"/>
+<line x1="405.29" y1="250.78" x2="412.29" y2="257.78" stroke="#333333" stroke-width="2.00"/>
+<line x1="413.29" y1="250.78" x2="420.29" y2="257.78" stroke="#333333" stroke-width="2.00"/>
+<rect x="242.50" y="119.50" width="115.00" height="161.00" fill="#d9d9d9" stroke="black" stroke-width="2.00"/>
+<g transform="translate(198.34,200.0) rotate(0.0)">
+<rect x="0.00" y="-13.80" width="74.10" height="27.60" fill="white" stroke="black" stroke-width="2.00"/>
+</g>
+<g transform="translate(327.56,200.0) rotate(0.0)">
+<rect x="0.00" y="-9.20" width="77.14" height="18.40" fill="white" stroke="black" stroke-width="2.00"/>
+</g>
+<line x1="198.34" y1="200.00" x2="272.44" y2="200.00" stroke="#999999" stroke-width="1.00" stroke-dasharray="6,6" stroke-opacity="0.50"/>
+<line x1="327.56" y1="200.00" x2="404.70" y2="200.00" stroke="#999999" stroke-width="1.00" stroke-dasharray="6,6" stroke-opacity="0.50"/>
+<g transform="translate(283.44,200.0) rotate(0.0)">
+<polygon points="0,13.80 33.12,9.20 33.12,-9.20 0,-13.80" fill="white" stroke="black" stroke-width="2"/>
+<polygon points="0,12.80 33.12,8.20 33.12,-8.20 0,-12.80" fill="white" stroke="none"/>
+<line x1="0" y1="0" x2="33.12" y2="0" stroke="#999999" stroke-width="1" stroke-dasharray="6,6" stroke-opacity="0.5"/>
+</g>
+<g transform="translate(187.3,200.0) rotate(0.0)">
+<rect x="0.00" y="-15.46" width="11.04" height="30.91" fill="#efefef" stroke="black" stroke-width="1.80"/>
+</g>
+<g transform="translate(272.43999999999994,200.0) rotate(0.0)">
+<rect x="0.00" y="-13.80" width="11.00" height="27.60" fill="white" stroke="black" stroke-width="2.00"/>
+<rect x="0.00" y="-17.25" width="4.00" height="34.50" fill="#efefef" stroke="black" stroke-width="1.60"/>
+<rect x="7.00" y="-17.25" width="4.00" height="34.50" fill="#efefef" stroke="black" stroke-width="1.60"/>
+</g>
+<g transform="translate(316.56,200.0) rotate(0.0)">
+<rect x="0.00" y="-9.20" width="11.00" height="18.40" fill="white" stroke="black" stroke-width="2.00"/>
+<rect x="0.00" y="-11.50" width="4.00" height="23.00" fill="#efefef" stroke="black" stroke-width="1.60"/>
+<rect x="7.00" y="-11.50" width="4.00" height="23.00" fill="#efefef" stroke="black" stroke-width="1.60"/>
+</g>
+<g transform="translate(404.7,200.0) rotate(0.0)">
+<rect x="0.00" y="-10.30" width="8.00" height="20.61" fill="#efefef" stroke="black" stroke-width="1.80"/>
+</g>
+<line x1="252.50" y1="314.50" x2="347.50" y2="314.50" stroke="black" stroke-width="1.60"/>
+<polygon points="252.50,310.00 252.50,319.00 242.50,314.50" fill="black" stroke="black" stroke-width="1.00"/>
+<polygon points="347.50,310.00 347.50,319.00 357.50,314.50" fill="black" stroke="black" stroke-width="1.00"/>
+<text x="300.00" y="330.50" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="middle">L = 2.5 m</text>
+<line x1="574.00" y1="127.50" x2="574.00" y2="272.50" stroke="black" stroke-width="1.60"/>
+<polygon points="570.00,127.50 578.00,127.50 574.00,119.50" fill="black" stroke="black" stroke-width="1.00"/>
+<polygon points="570.00,272.50 578.00,272.50 574.00,280.50" fill="black" stroke="black" stroke-width="1.00"/>
+<text x="566.00" y="200.00" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="end" dominant-baseline="middle">W = 3.5m</text>
+<text x="300.00" y="384.00" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="middle">Plan</text>
+</svg>

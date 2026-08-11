@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+<g transform="translate(298.80868738500027,202.09559996499996) rotate(-78.75)">
+<path d="M 0 0 A 62.00 62.00 0 0 0 23.73 -4.72" stroke="black" stroke-width="16.49" fill="none" stroke-linecap="butt"/>
+<path d="M 0 0 A 62.00 62.00 0 0 0 23.73 -4.72" stroke="white" stroke-width="12.49" fill="none" stroke-linecap="butt"/>
+<path d="M 0 0 A 62.00 62.00 0 0 0 23.73 -4.72" stroke="#999999" stroke-width="1" stroke-dasharray="6,6" stroke-opacity="0.5" fill="none"/>
+</g>
+<g transform="translate(298.80868738500027,202.09559996499996) rotate(-78.75)">
+<rect x="-69.00" y="-7.25" width="69.00" height="14.49" fill="white" stroke="black" stroke-width="2.00"/>
+<polygon points="0,-7.25 -10.35,-8.11 -10.35,8.11 0,7.25" fill="white" stroke="black" stroke-width="2.00"/>
+<line x1="-69.00" y1="0.00" x2="0.00" y2="0.00" stroke="#999999" stroke-width="1.00" stroke-dasharray="6,6" stroke-opacity="0.50"/>
+</g>
+<g transform="translate(298.80868738500027,177.90440003500007) rotate(-101.25)">
+<polygon points="0,-7.25 10.35,-8.11 10.35,8.11 0,7.25" fill="white" stroke="black" stroke-width="2.00"/>
+<line x1="0.00" y1="0.00" x2="10.35" y2="0.00" stroke="#999999" stroke-width="1.00" stroke-dasharray="6,6" stroke-opacity="0.50"/>
+</g>
+<polygon points="303.90,166.34 290.43,98.67 276.22,101.49 289.68,169.17" fill="white" stroke="black" stroke-width="2"/>
+<line x1="296.79" y1="167.75" x2="283.33" y2="100.08" stroke="grey" stroke-width="1" stroke-dasharray="6,6" stroke-opacity="0.5"/>
+<polygon points="307.25,109.50 307.25,270.50 422.25,270.50 422.25,109.50" fill="#d9d9d9" stroke="black" stroke-width="2.00"/>
+<line x1="215.25" y1="190.00" x2="293.25" y2="190.00" stroke="#d32f2f" stroke-width="2.30"/>
+<polygon points="307.25,190.00 293.25,197.00 293.25,183.00" fill="#d32f2f" stroke="#d32f2f" stroke-width="1.00"/>
+<text x="199.25" y="190.00" fill="#d32f2f" font-size="18.00" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle">T</text>
+<text x="300.00" y="384.00" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="middle">Plan</text>
+</svg>

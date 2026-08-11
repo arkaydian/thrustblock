@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="180" viewBox="0 0 240 180">
+<rect x="120.00" y="79.00" width="260.00" height="22.00" fill="white" stroke="black" stroke-width="2.00"/>
+<rect x="65.00" y="77.68" width="55.00" height="24.64" fill="#efefef" stroke="black" stroke-width="1.80"/>
+<line x1="60.00" y1="90.00" x2="380.00" y2="90.00" stroke="#999999" stroke-width="1.00" stroke-dasharray="6,6" stroke-opacity="0.50"/>
+<text x="120.00" y="132.00" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="middle">Blank End</text>
+</svg>

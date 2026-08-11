@@ -376,47 +376,23 @@ class ThrustBlockController(vkt.Controller):
                 </div>
             </div>
             """
+        drawings = fitting_type.svg_drawings()
+        drawings_count = len(drawings)
+        drawings_grid_class = "drawings-grid"
+        if drawings_count == 1:
+            drawings_grid_class += " single"
+        elif drawings_count == 2:
+            drawings_grid_class += " two"
+        drawing_cards_html = ""
+        for drawing in drawings:
+            drawing_title = drawing.name.replace("_", " ").title()
+            drawing_cards_html += f"""
+            <div class=\"drawing-card\">
+                <div class=\"drawing-title\">{drawing_title}</div>
+                <div class=\"drawing-body\">{drawing.svg}</div>
+            </div>
+            """
 
-                    # Read user-defined canvas size, falling back to sensible defaults if empty
-        canvas_w = 600   # SVG canvas width in pixels
-        canvas_h = 300    # SVG canvas height in pixels
-        depth_crown = params.fitting_section.crown_depth * 1000
-        gw_level = params.soil_section.groundwater_level * 1000
-        height = params.block_section.height * 1000
-        width = params.block_section.width * 1000
-        length = params.block_section.length * 1000
-
-        if params.block_section.is_depth_custom == "No":
-            block_depth = (params.fitting_section.crown_depth + params.fitting_section.outside_diameter /2 + params.block_section.height/2) * 1000
-        else:
-            block_depth = params.block_section.depth * 1000
-
-        if params.fitting_section.fitting_type == "Blank End":
-            od = params.fitting_section.outside_diameter * 1000
-            svg = build_socket_pipe_svg(od, canvas_w, canvas_h)
-            svg_section = ""
-        elif params.fitting_section.fitting_type == "Taper Thrust":
-            if params.block_section.is_depth_custom == "No":
-                block_depth = (params.fitting_section.crown_depth + params.fitting_section.outside_diameter_large /2 + params.block_section.height/2) * 1000
-            else:
-                block_depth = block_depth = params.block_section.depth * 1000
-            od_large = params.fitting_section.outside_diameter_large * 1000
-            od_small = params.fitting_section.outside_diameter_small * 1000
-            svg = build_taper_thrust_svg(height, width, length, od_large, od_small, canvas_w, canvas_h)
-            svg_section = build_taper_thrust_section_svg(height, width, length, block_depth, gw_level, od_large, depth_crown, canvas_w, canvas_h)
-        elif params.fitting_section.fitting_type == "Horizontal Bend":
-            od = params.fitting_section.outside_diameter * 1000
-            angle = params.fitting_section.angle
-            svg = build_horizontal_bend(height, width, length, block_depth, gw_level, od, depth_crown, 0 - angle/2, angle, canvas_w, canvas_h)
-            svg_section = build_horizontal_bend_section_svg(height, width, length, block_depth, gw_level, od, depth_crown, canvas_w, canvas_h)
-        elif params.fitting_section.fitting_type == "Vertical Upturn Bend":
-            od = params.fitting_section.outside_diameter * 1000
-            angle = params.fitting_section.angle
-            svg = build_vertical_upturn_bend_section_svg(height, width, length, block_depth, gw_level, od, depth_crown, 90, angle, canvas_w, canvas_h)
-            svg_section = None
-        else:
-            svg = ""
-            svg_section = ""
         html = f"""
         <!DOCTYPE html>
         <html>
@@ -543,19 +519,56 @@ class ThrustBlockController(vkt.Controller):
                     font-size: 15px;
                     margin-top: 40px;
                 }}
-                .container {{
-                background: white;
-                padding: 24px;
-                border-radius: 8px;
-                box-shadow: 0 2px 12px rgba(0,0,0,0.12);   /* Subtle card shadow */
+                .drawings-grid {{
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(384px, 1fr));
+                    gap: 14.4px;
+                    margin-bottom: 24px;
                 }}
-                .drawings-row {{
-                    display: flex;
-                    flex-direction: row;
-                    align-items: flex-start;
-                    gap: 16px;
-                    margin-bottom: 28px;
-                    width: fit-content;
+
+                .drawings-grid.single {{
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }}
+
+                .drawings-grid.two {{
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }}
+
+                @media (max-width: 980px) {{
+                    .drawings-grid.single {{
+                        grid-template-columns: 1fr;
+                    }}
+
+                    .drawings-grid.two {{
+                        grid-template-columns: 1fr;
+                    }}
+                }}
+
+                .drawing-card {{
+                    background: white;
+                    padding: 12px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+                    border: 1px solid #e8edf3;
+                }}
+
+                .drawing-title {{
+                    font-size: 15.6px;
+                    font-weight: 600;
+                    color: #2c3e50;
+                    margin-bottom: 9.6px;
+                }}
+
+                .drawing-body {{
+                    max-height: 336px;
+                    overflow: auto;
+                }}
+
+                .drawing-body svg {{
+                    width: 100%;
+                    height: auto;
+                    max-height: 312px;
+                    display: block;
                 }}
             </style>
         </head>
@@ -564,13 +577,8 @@ class ThrustBlockController(vkt.Controller):
             <div class="meta">
                 Condition: <span>Criterion &gt; value → Unsafe</span>
             </div>
-            <div class="drawings-row">
-                <div class="container"> 
-                {svg} 
-                </div>
-                <div class="container"> 
-                {svg_section} 
-                </div>
+            <div class="{drawings_grid_class}">
+                {drawing_cards_html}
             </div>
             <div class="legend">
                 <div class="legend-item">

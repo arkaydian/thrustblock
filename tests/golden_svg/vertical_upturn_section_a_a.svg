@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+<rect x="219.50" y="158.60" width="161.00" height="82.80" fill="#d9d9d9" stroke="black" stroke-width="2.00"/>
+<line x1="20.00" y1="146.75" x2="580.00" y2="146.75" stroke="black" stroke-width="2.00"/>
+<line x1="20.00" y1="183.56" x2="580.00" y2="183.56" stroke="#42a5f5" stroke-width="1.00" stroke-dasharray="8,6"/>
+<circle cx="300.00" cy="200.00" r="7.25" fill="white" stroke="black" stroke-width="2.00"/>
+<line x1="163.50" y1="154.75" x2="163.50" y2="175.56" stroke="#42a5f5" stroke-width="1.60"/>
+<polygon points="159.50,154.75 167.50,154.75 163.50,146.75" fill="#42a5f5" stroke="#42a5f5" stroke-width="1.00"/>
+<polygon points="159.50,175.56 167.50,175.56 163.50,183.56" fill="#42a5f5" stroke="#42a5f5" stroke-width="1.00"/>
+<text x="155.50" y="165.16" fill="#42a5f5" font-size="13.00" font-family="Arial, sans-serif" text-anchor="end" dominant-baseline="middle">Z_GW = 0.8m</text>
+<line x1="328.00" y1="154.75" x2="328.00" y2="184.75" stroke="black" stroke-width="1.60"/>
+<polygon points="324.00,154.75 332.00,154.75 328.00,146.75" fill="black" stroke="black" stroke-width="1.00"/>
+<polygon points="324.00,184.75 332.00,184.75 328.00,192.75" fill="black" stroke="black" stroke-width="1.00"/>
+<text x="336.00" y="169.75" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="start" dominant-baseline="middle">Z_0 = 1.0m</text>
+<line x1="412.50" y1="166.60" x2="412.50" y2="233.40" stroke="black" stroke-width="1.60"/>
+<polygon points="408.50,166.60 416.50,166.60 412.50,158.60" fill="black" stroke="black" stroke-width="1.00"/>
+<polygon points="408.50,233.40 416.50,233.40 412.50,241.40" fill="black" stroke="black" stroke-width="1.00"/>
+<text x="420.50" y="200.00" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="start" dominant-baseline="middle">H = 1.8m</text>
+<line x1="478.50" y1="154.75" x2="478.50" y2="233.40" stroke="black" stroke-width="1.60"/>
+<polygon points="474.50,154.75 482.50,154.75 478.50,146.75" fill="black" stroke="black" stroke-width="1.00"/>
+<polygon points="474.50,233.40 482.50,233.40 478.50,241.40" fill="black" stroke="black" stroke-width="1.00"/>
+<text x="486.50" y="194.08" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="start" dominant-baseline="middle">Z_b = 2.1m</text>
+<line x1="229.50" y1="257.40" x2="370.50" y2="257.40" stroke="black" stroke-width="1.60"/>
+<polygon points="229.50,252.90 229.50,261.90 219.50,257.40" fill="black" stroke="black" stroke-width="1.00"/>
+<polygon points="370.50,252.90 370.50,261.90 380.50,257.40" fill="black" stroke="black" stroke-width="1.00"/>
+<text x="300.00" y="273.40" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="middle">W = 3.5m</text>
+<text x="300.00" y="305.40" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="middle">Section A-A</text>
+</svg>

@@ -1,4 +1,4 @@
-#!/home/arcadis_kh/viktor-apps/thrust-block-calculator/venv/bin/python
+#!/home/hbkayo/python/civeng/thrustblock/venv/bin/python
 # -*- coding: utf-8 -*-
 import sys
 from jupyter_client.kernelapp import main

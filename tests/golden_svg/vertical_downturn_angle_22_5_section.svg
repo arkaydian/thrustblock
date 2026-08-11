@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+<line x1="20.00" y1="189.01" x2="780.00" y2="189.01" stroke="black" stroke-width="2.00"/>
+<line x1="20.00" y1="225.81" x2="780.00" y2="225.81" stroke="#42a5f5" stroke-width="1.00" stroke-dasharray="8,6"/>
+<polygon points="50.00,181.01 62.00,181.01 56.00,189.01" fill="black" stroke="black" stroke-width="1.00"/>
+<text x="68.00" y="179.01" fill="black" font-size="12.00" font-family="Arial, sans-serif" text-anchor="start" dominant-baseline="middle">Ground level</text>
+<g transform="translate(412.09559996499996,248.8086873850003) rotate(-180.0)">
+<rect x="-91.40" y="-47.19" width="207.00" height="92.00" fill="#d9d9d9" stroke="black" stroke-width="2.00"/>
+<path d="M 0 0 A 62.00 62.00 0 0 0 23.73 -4.72" stroke="black" stroke-width="29.60" fill="none" stroke-linecap="butt"/>
+<path d="M 0 0 A 62.00 62.00 0 0 0 23.73 -4.72" stroke="white" stroke-width="25.60" fill="none" stroke-linecap="butt"/>
+<path d="M 0 0 A 62.00 62.00 0 0 0 23.73 -4.72" stroke="#999999" stroke-width="1" stroke-dasharray="6,6" stroke-opacity="0.5" fill="none"/>
+<g transform="translate(0.0,0.0) rotate(0.0)">
+<rect x="-4.14" y="-16.56" width="8.28" height="33.12" fill="white" stroke="black" stroke-width="2.00"/>
+<line x1="-4.14" y1="0.00" x2="4.14" y2="0.00" stroke="#999999" stroke-width="1.00" stroke-dasharray="6,6" stroke-opacity="0.50"/>
+</g>
+<polygon points="-4.14,-13.80 -50.14,-13.80 -50.14,13.80 -4.14,13.80" fill="white" stroke="black" stroke-width="2"/>
+<line x1="-4.14" y1="0.00" x2="-50.14" y2="0.00" stroke="grey" stroke-width="1" stroke-dasharray="6,6" stroke-opacity="0.5"/>
+<g transform="translate(23.726372806635567,-4.719468984300223) rotate(-22.500000000000004)">
+<rect x="-4.14" y="-16.56" width="8.28" height="33.12" fill="white" stroke="black" stroke-width="2.00"/>
+<line x1="-4.14" y1="0.00" x2="4.14" y2="0.00" stroke="#999999" stroke-width="1.00" stroke-dasharray="6,6" stroke-opacity="0.50"/>
+</g>
+<polygon points="32.83,6.45 75.33,-11.16 64.77,-36.66 22.27,-19.05" fill="white" stroke="black" stroke-width="2"/>
+<line x1="27.55" y1="-6.30" x2="70.05" y2="-23.91" stroke="grey" stroke-width="1" stroke-dasharray="6,6" stroke-opacity="0.5"/>
+<rect x="-70.70" y="-37.99" width="165.60" height="73.60" fill="none" stroke="#4d4d4d" stroke-width="1.20" stroke-dasharray="6,5"/>
+<line x1="12.10" y1="-1.19" x2="54.10" y2="-1.19" stroke="#d32f2f" stroke-width="1.50"/>
+<polygon points="68.10,-1.19 54.10,3.81 54.10,-6.19" fill="#d32f2f" stroke="#d32f2f" stroke-width="1.00"/>
+<text x="80.10" y="-1.19" fill="#d32f2f" font-size="11.00" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle" transform="rotate(180.0 80.10 -1.19)">T_x</text>
+<line x1="12.10" y1="-1.19" x2="12.10" y2="40.81" stroke="#d32f2f" stroke-width="1.50"/>
+<polygon points="12.10,54.81 7.10,40.81 17.10,40.81" fill="#d32f2f" stroke="#d32f2f" stroke-width="1.00"/>
+<text x="15.39" y="66.35" fill="#d32f2f" font-size="11.00" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle" transform="rotate(180.0 15.39 66.35)">T_z</text>
+<line x1="12.10" y1="-1.19" x2="25.36" y2="65.50" stroke="#d32f2f" stroke-width="1.50"/>
+<polygon points="28.09,79.23 20.46,66.48 30.27,64.53" fill="#d32f2f" stroke="#d32f2f" stroke-width="1.00"/>
+<text x="34.75" y="89.22" fill="#d32f2f" font-size="11.00" font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="middle" transform="rotate(180.0 34.75 89.22)">T</text>
+</g>
+<line x1="246.50" y1="197.01" x2="246.50" y2="217.81" stroke="#42a5f5" stroke-width="1.60"/>
+<polygon points="242.50,197.01 250.50,197.01 246.50,189.01" fill="#42a5f5" stroke="#42a5f5" stroke-width="1.00"/>
+<polygon points="242.50,217.81 250.50,217.81 246.50,225.81" fill="#42a5f5" stroke="#42a5f5" stroke-width="1.00"/>
+<text x="238.50" y="207.41" fill="#42a5f5" font-size="13.00" font-family="Arial, sans-serif" text-anchor="end" dominant-baseline="middle">Z_GW = 0.8m</text>
+<line x1="426.10" y1="197.01" x2="426.10" y2="227.01" stroke="black" stroke-width="1.60"/>
+<polygon points="422.10,197.01 430.10,197.01 426.10,189.01" fill="black" stroke="black" stroke-width="1.00"/>
+<polygon points="422.10,227.01 430.10,227.01 426.10,235.01" fill="black" stroke="black" stroke-width="1.00"/>
+<text x="434.10" y="212.01" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="start" dominant-baseline="middle">Z_0 = 1.0m</text>
+<line x1="533.50" y1="212.00" x2="533.50" y2="288.00" stroke="black" stroke-width="1.60"/>
+<polygon points="529.50,212.00 537.50,212.00 533.50,204.00" fill="black" stroke="black" stroke-width="1.00"/>
+<polygon points="529.50,288.00 537.50,288.00 533.50,296.00" fill="black" stroke="black" stroke-width="1.00"/>
+<text x="541.50" y="250.00" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="start" dominant-baseline="middle">H = 2.0m</text>
+<line x1="599.50" y1="197.01" x2="599.50" y2="288.00" stroke="black" stroke-width="1.60"/>
+<polygon points="595.50,197.01 603.50,197.01 599.50,189.01" fill="black" stroke="black" stroke-width="1.00"/>
+<polygon points="595.50,288.00 603.50,288.00 599.50,296.00" fill="black" stroke="black" stroke-width="1.00"/>
+<text x="607.50" y="242.50" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="start" dominant-baseline="middle">Z_b = 2.3m</text>
+<line x1="306.50" y1="312.00" x2="493.50" y2="312.00" stroke="black" stroke-width="1.60"/>
+<polygon points="306.50,307.50 306.50,316.50 296.50,312.00" fill="black" stroke="black" stroke-width="1.00"/>
+<polygon points="493.50,307.50 493.50,316.50 503.50,312.00" fill="black" stroke="black" stroke-width="1.00"/>
+<text x="400.00" y="330.00" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="middle">L = 4.5m</text>
+<text x="400.00" y="484.00" fill="black" font-size="13.00" font-family="Arial, sans-serif" text-anchor="middle">Vertical Downturn Bend</text>
+</svg>

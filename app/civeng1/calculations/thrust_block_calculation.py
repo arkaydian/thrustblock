@@ -1,7 +1,7 @@
 import math
 from dataclasses import dataclass
 from abc import ABC
-from typing import Dict, Any, Callable, Tuple, List, Union
+from typing import TYPE_CHECKING, Dict, Any, Callable, Tuple, List, Union
 from app.civeng1.soils.soil_mechanics import Soil, create_soil, UNIT_WEIGHT_WATER, CoarseSoil, FineSoil, CoarseEmbedment, FineEmbedment, Embedment, create_embedment, EngRes as SoilEngRes
 from app.civeng1.reporting.engres import EngRes as ReportingEngRes
 from app.civeng1.hydraulics.pipes import WeldedPePipe
@@ -19,6 +19,9 @@ from app.civeng1.hydraulics.fittings import (
     TaperThrust,
     FlangedMetallicPipe,
 )
+
+if TYPE_CHECKING:
+    from app.utils.svgwriter import DrawingOptions, SVGDrawing
 
 #--- Utils and Types ---
 
@@ -81,6 +84,15 @@ class FittingCalculation(ABC):
         if component is not None:
             return getattr(component, name)
         raise AttributeError(name)
+
+    def svg_drawings(
+        self,
+        options: "DrawingOptions | None" = None,
+    ) -> list["SVGDrawing"]:
+        from app.utils.svg.registry import get_svg_writer
+
+        writer = get_svg_writer(type(self))
+        return writer.build(calculation=self, options=options)
 
     @staticmethod
     def _binary_check_formula(lhs: float, rhs: float, passed: bool) -> str:

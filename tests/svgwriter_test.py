@@ -9,6 +9,7 @@ assert spec.loader is not None
 spec.loader.exec_module(svgwriter)
 
 SVGCanvas = svgwriter.SVGCanvas
+build_vertical_downturn_bend_section_svg = svgwriter.build_vertical_downturn_bend_section_svg
 build_horizontal_bend = svgwriter.build_horizontal_bend
 socket_pipe_local = svgwriter.socket_pipe_local
 
@@ -84,3 +85,42 @@ def test_horizontal_bend_plan_uses_opening_only_outlet_socket() -> None:
 
     assert svg.count("<polygon") >= 5
     assert "<rect" in svg
+
+
+def test_vertical_downturn_section_builder_returns_svg() -> None:
+    svg = build_vertical_downturn_bend_section_svg(
+        block_height=2.0,
+        block_width=2.5,
+        block_length=4.5,
+        block_depth=2.5,
+        gw_level=0.8,
+        od=0.6,
+        depth_crown=1.0,
+        angle=45.0,
+        canvas_w=800,
+        canvas_h=500,
+    )
+
+    assert "Vertical Downturn Bend" in svg
+    assert "Ground level" in svg
+    assert "stroke-dasharray=\"8,6\"" in svg
+
+
+def test_vertical_downturn_section_includes_double_flanges_and_reinforcement() -> None:
+    svg = build_vertical_downturn_bend_section_svg(
+        block_height=2.0,
+        block_width=2.5,
+        block_length=4.5,
+        block_depth=2.5,
+        gw_level=0.8,
+        od=0.6,
+        depth_crown=1.0,
+        angle=45.0,
+        canvas_w=800,
+        canvas_h=500,
+    )
+
+    # Keep only the dashed reinforcement perimeter (no internal grid lines).
+    assert svg.count("stroke-dasharray=\"5,4\"") == 0
+    assert svg.count("stroke-dasharray=\"6,5\"") >= 1
+    assert svg.count("<rect") >= 3

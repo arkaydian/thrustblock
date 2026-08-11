@@ -1,534 +1,1234 @@
+from __future__ import annotations
+
 import math
+from dataclasses import dataclass
+from enum import Enum
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
+import sys
+from types import ModuleType
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Callable, List, NewType, Tuple, TypedDict
+from typing import TYPE_CHECKING, Callable, List, NewType, Protocol
+
+if __name__ not in sys.modules:
+    _self_module = ModuleType(__name__)
+    _self_module.__dict__.update(globals())
+    sys.modules[__name__] = _self_module
 
 if TYPE_CHECKING:
-    from app.civeng1.hydraulics.fittings import HorizontalBend
-    from app.civeng1.hydraulics.fittings import TaperThrust
-    from app.civeng1.hydraulics.fittings import VerticalUpturnBend
-    from app.civeng1.structures.concrete import ThrustBlock
+    from app.utils.svg.canvas import CanvasLayout as CanvasLayoutType
+    from app.utils.svg.canvas import Point as PointType
+    from app.utils.svg.canvas import Port as PortType
+    from app.utils.svg.canvas import SVGCanvas as SVGCanvasType
+    from app.utils.svg.canvas import Vector as VectorType
+    from app.utils.svg.geometry import AnchorGeometry as AnchorGeometryType
+    from app.utils.svg.geometry import BendGeometry as BendGeometryType
+    from app.utils.svg.geometry import FittingPlacement as FittingPlacementType
 
-Mm = NewType("Mm", float)
-Px = NewType("Px", float)
+try:
+    from app.utils.svg.canvas import CanvasLayout, Point, Port, SVGCanvas, Vector
+    from app.utils.svg.geometry import AnchorGeometry, BendGeometry, FittingPlacement, add_vector, rotate_point, rotate_vector, scale_vector
+except ModuleNotFoundError:
+    _canvas_spec = spec_from_file_location(
+        "svgwriter_canvas_module",
+        Path(__file__).resolve().parent / "svg" / "canvas.py",
+    )
+    assert _canvas_spec is not None
+    _canvas_module = module_from_spec(_canvas_spec)
+    assert _canvas_spec.loader is not None
+    sys.modules[_canvas_spec.name] = _canvas_module
+    _canvas_spec.loader.exec_module(_canvas_module)
+    CanvasLayout = _canvas_module.CanvasLayout
+    Point = _canvas_module.Point
+    Port = _canvas_module.Port
+    SVGCanvas = _canvas_module.SVGCanvas
+    Vector = _canvas_module.Vector
 
-BEND_ANGLES = {
-    "11.25°": 11.25,
-    "22.5°": 22.5,
-    "45°": 45.0,
-    "90°": 90.0,
-}
-
-# =========================================================
-# PORT DEFINITION
-# =========================================================
-
-class Port(TypedDict):
-    """
-    Represents a connection point on a pipe or fitting.
-
-    center : (float, float)
-        Centreline point (x, y) in SVG coordinates
-
-    tangent : (float, float)
-        Unit direction vector (tx, ty)
-    """
-    center: Tuple[float, float]
-    tangent: Tuple[float, float]
+    _geometry_spec = spec_from_file_location(
+        "svgwriter_geometry_module",
+        Path(__file__).resolve().parent / "svg" / "geometry.py",
+    )
+    assert _geometry_spec is not None
+    _geometry_module = module_from_spec(_geometry_spec)
+    assert _geometry_spec.loader is not None
+    sys.modules[_geometry_spec.name] = _geometry_module
+    _geometry_spec.loader.exec_module(_geometry_module)
+    AnchorGeometry = _geometry_module.AnchorGeometry
+    BendGeometry = _geometry_module.BendGeometry
+    FittingPlacement = _geometry_module.FittingPlacement
+    add_vector = _geometry_module.add_vector
+    rotate_point = _geometry_module.rotate_point
+    rotate_vector = _geometry_module.rotate_vector
+    scale_vector = _geometry_module.scale_vector
 
 
-# =========================================================
-# SVG CANVAS
-# =========================================================
+class _CompatStrEnum(str, Enum):
+    pass
 
-class SVGCanvas:
+
+class DrawingView(_CompatStrEnum):
+    ELEVATION = "elevation"
+    PLAN = "plan"
+    SECTION = "section"
+
+
+class DrawingKind(_CompatStrEnum):
+    ELEVATION = "elevation"
+    PLAN = "plan"
+    SECTION = "section"
+    VERTICAL_UPTURN_LONGITUDINAL = "vertical_upturn_longitudinal"
+    VERTICAL_DOWNTURN_LONGITUDINAL = "vertical_downturn_longitudinal"
+    THRUST_BLOCK_SECTION_A_A = "thrust_block_section_a_a"
+
+
+@dataclass(frozen=True, slots=True)
+class SVGDrawing:
+    name: str
+    svg: str
+    view: DrawingView | None = None
+    kind: DrawingKind | None = None
+
+    def __post_init__(self) -> None:
+        resolved_view = self.view
+        if resolved_view is None:
+            try:
+                resolved_view = DrawingView(self.name)
+            except ValueError:
+                resolved_view = None
+
+        resolved_kind = self.kind
+        if resolved_kind is None and resolved_view is not None:
+            if resolved_view == DrawingView.ELEVATION:
+                resolved_kind = DrawingKind.ELEVATION
+            elif resolved_view == DrawingView.PLAN:
+                resolved_kind = DrawingKind.PLAN
+            elif resolved_view == DrawingView.SECTION:
+                resolved_kind = DrawingKind.SECTION
+
+        object.__setattr__(self, "view", resolved_view)
+        object.__setattr__(self, "kind", resolved_kind)
+
+
+@dataclass(frozen=True, slots=True)
+class DrawingOptions:
+    canvas_width: int = 600
+    canvas_height: int = 400
+    start_angle_deg: float | None = None
+    bend_orientation_deg: float | None = None
+
+
+class BlankEndLike(Protocol):
+    @property
+    def outside_diameter(self) -> float:
+        ...
+
+
+class TaperLike(Protocol):
+    @property
+    def outside_diameter_large(self) -> float:
+        ...
+
+    @property
+    def outside_diameter_small(self) -> float:
+        ...
+
+
+class BendLike(Protocol):
+    @property
+    def outside_diameter(self) -> float:
+        ...
+
+    @property
+    def angle(self) -> float:
+        ...
+
+    @property
+    def radius(self) -> float:
+        ...
+
+
+class ThrustBlockLike(Protocol):
+    @property
+    def height(self) -> float:
+        ...
+
+    @property
+    def width(self) -> float:
+        ...
+
+    @property
+    def length(self) -> float:
+        ...
+
+    @property
+    def depth(self) -> float:
+        ...
+
+
+class SoilDrawingLike(Protocol):
+    @property
+    def ground_water_level(self) -> float:
+        ...
+
+    @property
+    def thrust_block(self) -> ThrustBlockLike | None:
+        ...
+
+
+class BlankEndCalculationLike(Protocol):
+    @property
+    def component(self) -> BlankEndLike:
+        ...
+
+    @property
+    def thrust_force_resultant(self) -> float:
+        ...
+
+
+class TaperCalculationLike(Protocol):
+    @property
+    def component(self) -> TaperLike:
+        ...
+
+    @property
+    def soil_type(self) -> SoilDrawingLike:
+        ...
+
+    @property
+    def crown_depth(self) -> float:
+        ...
+
+    @property
+    def thrust_force_resultant(self) -> float:
+        ...
+
+
+class HorizontalBendCalculationLike(Protocol):
+    @property
+    def component(self) -> BendLike:
+        ...
+
+    @property
+    def soil_type(self) -> SoilDrawingLike:
+        ...
+
+    @property
+    def crown_depth(self) -> float:
+        ...
+
+    @property
+    def thrust_force_resultant(self) -> float:
+        ...
+
+
+class VerticalBendCalculationLike(Protocol):
+    @property
+    def component(self) -> BendLike:
+        ...
+
+    @property
+    def soil_type(self) -> SoilDrawingLike:
+        ...
+
+    @property
+    def crown_depth(self) -> float:
+        ...
+
+    @property
+    def thrust_force_resultant(self) -> float:
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class BlankEndInput:
+    outside_diameter: float
+
+
+@dataclass(frozen=True, slots=True)
+class TaperInput:
+    outside_diameter_large: float
+    outside_diameter_small: float
+
+
+@dataclass(frozen=True, slots=True)
+class BendInput:
+    outside_diameter: float
+    angle: float
+    radius: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class ThrustBlockInput:
+    height: float
+    width: float
+    length: float
+    depth: float
+
+
+def _canvas_svg_string(canvas: SVGCanvasType) -> str:
+    """Serialize a canvas to a standalone SVG document string."""
+    return canvas.to_svg()
+
+
+def _drawing_from_canvas(
+    name: str,
+    canvas: SVGCanvasType,
+    *,
+    view: DrawingView | None = None,
+    kind: DrawingKind | None = None,
+) -> SVGDrawing:
+    return SVGDrawing(name=name, svg=canvas.to_svg(), view=view, kind=kind)
+
+
+def _require_thrust_block(soil: SoilDrawingLike) -> ThrustBlockLike:
+    thrust_block = soil.thrust_block
+    if thrust_block is None:
+        raise ValueError("Cannot generate thrust-block SVG drawings because soil_type.thrust_block is None")
+    return thrust_block
+
+
+class BlankEndSVGWriter:
+    @classmethod
+    def build(
+        cls,
+        calculation: BlankEndCalculationLike,
+        options: DrawingOptions | None = None,
+    ) -> list[SVGDrawing]:
+        options = options or DrawingOptions()
+        _ = calculation.thrust_force_resultant
+        return cls(
+            fitting=calculation.component,
+            canvas_w=options.canvas_width,
+            canvas_h=options.canvas_height,
+        ).drawings()
+
+    def __init__(self, fitting: BlankEndLike, canvas_w: int, canvas_h: int) -> None:
+        self._fitting = fitting
+        self._canvas_w = canvas_w
+        self._canvas_h = canvas_h
+
+    def drawings(self) -> list[SVGDrawing]:
+        return [self._build_elevation()]
+
+    def _build_elevation(self) -> SVGDrawing:
+        canvas = SVGCanvas(scale=1.0, width=self._canvas_w, height=self._canvas_h)
+        centre_y = self._canvas_h / 2
+        pipe_len = 260.0
+        socket_len = 55.0
+        pipe_half = self._fitting.outside_diameter / 2
+        canvas.rect(120.0, centre_y - pipe_half, pipe_len, self._fitting.outside_diameter, fill="white", stroke="black", stroke_w=2)
+        canvas.rect(120.0 - socket_len, centre_y - pipe_half * 1.12, socket_len, self._fitting.outside_diameter * 1.12, fill="#efefef", stroke="black", stroke_w=1.8)
+        canvas.line(60.0, centre_y, 380.0, centre_y, stroke="#999999", stroke_w=1, dasharray="6,6", stroke_opacity=0.5)
+        canvas.text(self._canvas_w / 2, centre_y + 42.0, "Blank End", fill="black", font_size=13, font_family="Arial, sans-serif", text_anchor="middle")
+        return _drawing_from_canvas("elevation", canvas, view=DrawingView.ELEVATION, kind=DrawingKind.ELEVATION)
+
+
+class TaperSVGWriter:
+    @classmethod
+    def build(
+        cls,
+        calculation: TaperCalculationLike,
+        options: DrawingOptions | None = None,
+    ) -> list[SVGDrawing]:
+        options = options or DrawingOptions()
+        thrust_block = _require_thrust_block(calculation.soil_type)
+        _ = calculation.thrust_force_resultant
+        return cls(
+            thrust_block=thrust_block,
+            taper=calculation.component,
+            canvas_w=options.canvas_width,
+            canvas_h=options.canvas_height,
+            depth_crown=calculation.crown_depth,
+            gw_level=calculation.soil_type.ground_water_level,
+        ).drawings()
 
     def __init__(
         self,
-        scale: float = 1.0,
-        width: int = 5000,
-        height: int = 5000,
-        pipe_stroke: str = "black",
+        thrust_block: ThrustBlockLike,
+        taper: TaperLike,
+        canvas_w: int,
+        canvas_h: int,
+        depth_crown: float = 1.0,
+        gw_level: float = 0.8,
     ) -> None:
-        """
-        Initialise the SVG canvas.
+        self._block = thrust_block
+        self._taper = taper
+        self._canvas_w = canvas_w
+        self._canvas_h = canvas_h
+        self._depth_crown = depth_crown
+        self._gw_level = gw_level
 
-        Parameters
-        ----------
-        scale : float
-            Scale factor applied to all dimensions
+    def drawings(self) -> list[SVGDrawing]:
+        return [self._build_plan(), self._build_section()]
 
-        width : float
-            Canvas width (px)
-
-        height : float
-            Canvas height (px)
-
-        pipe_stroke : str
-            Default pipe stroke colour
-        """
-        self.scale = scale
-        self.width = width
-        self.height = height
-
-        self._lines: list[str] = []  # stores SVG elements
-
-        # Default styles
-        self.pipe_fill = "white"
-        self.pipe_stroke = pipe_stroke
-        self.sw: float = 3 * scale
-        self.dsw: float = 1.5 * scale
-
-
-    # =========================================================
-    # BASIC UTILITIES
-    # =========================================================
-
-    def mm_to_px(self, v: float) -> float:
-        """
-        Scale a value.
-
-        Parameters
-        ----------
-        v : float
-
-        Returns
-        -------
-        float
-        """
-        return v * self.scale
-
-
-    def _unit(self, vx: float, vy: float) -> Tuple[float, float]:
-        """
-        Normalise a vector.
-
-        Returns unit vector (vx, vy)
-        """
-        length = math.hypot(vx, vy)
-        if length == 0:
-            raise ValueError("Zero-length vector")
-        return (vx / length, vy / length)
-
-
-    def make_port(self, x: float, y: float, tx: float, ty: float) -> Port:
-        """
-        Create a port with a normalised tangent.
-
-        Parameters
-        ----------
-        x, y : float
-            Centreline location
-
-        tx, ty : float
-            Direction vector
-
-        Returns
-        -------
-        Port
-        """
-        tx, ty = self._unit(tx, ty)
-        return {"center": (x, y), "tangent": (tx, ty)}
-
-
-    # =========================================================
-    # GROUPING (REQUIRED FOR SNAPPING)
-    # =========================================================
-
-    def begin_group(self, transform: str) -> None:
-        """
-        Start a transformed SVG group.
-
-        Parameters
-        ----------
-        transform : str
-            SVG transform string
-            e.g. "translate(x, y)", "rotate(angle)", "matrix(...)"
-        """
-        self._lines.append(f'<g transform="{transform}">')
-
-
-    def end_group(self) -> None:
-        """
-        Close the current group.
-        """
-        self._lines.append("</g>")
-
-
-    # =========================
-    # PIPE / FITTING METHODS
-    # =========================
-
-
-    def pipe_from_port(self, port: Port, length: Px, diameter: Px) -> Port:
-        """
-        Draw a pipe with diameter (rectangle) from a port.
-
-        Parameters
-        ----------
-        port : Port
-            Starting point + direction
-
-        length : Px
-            Pipe length
-
-        diameter : Px
-            Pipe diameter (width)
-
-        Returns
-        -------
-        Port
-            New port at pipe end
-        """
-
-        # unpack port
-        x, y = port["center"]
-        tx, ty = port["tangent"]
-
-        # end point
-        x2 = x + tx * length
-        y2 = y + ty * length
-
-        # half width
-        r = diameter / 2
-
-        # normal vector (perpendicular)
-        nx = -ty
-        ny = tx
-
-        # offset points (4 corners of rectangle)
-        x1_top = x + nx * r
-        y1_top = y + ny * r
-
-        x1_bot = x - nx * r
-        y1_bot = y - ny * r
-
-        x2_top = x2 + nx * r
-        y2_top = y2 + ny * r
-
-        x2_bot = x2 - nx * r
-        y2_bot = y2 - ny * r
-
-        # draw pipe body
-        self._lines.append(
-            f'<polygon points="'
-            f'{x1_top:.2f},{y1_top:.2f} '
-            f'{x2_top:.2f},{y2_top:.2f} '
-            f'{x2_bot:.2f},{y2_bot:.2f} '
-            f'{x1_bot:.2f},{y1_bot:.2f}" '
-            f'fill="{self.pipe_fill}" stroke="{self.pipe_stroke}" stroke-width="2"/>'
-        )
-
-        
-        
-        # draw centreline (grey + semi-transparent)
-        self._lines.append(
-            f'<line x1="{x:.2f}" y1="{y:.2f}" '
-            f'x2="{x2:.2f}" y2="{y2:.2f}" '
-            f'stroke="grey" '
-            f'stroke-width="1" '
-            f'stroke-dasharray="6,6" '
-            f'stroke-opacity="0.5"/>'
-        )
-        return self.make_port(x2, y2, tx, ty)
-
-    def place_fitting_local(self, port: Port, draw_func: Callable[[], List[Port]]) -> List[Port]:
-        """
-        Place a fitting defined in local coordinates (0,0) at a given port.
-
-        Parameters
-        ----------
-        port : Port
-            Target placement location and direction
-
-        draw_func : Callable[[], List[Port]]
-            Function that draws the fitting at (0,0) in local coordinates.
-            Must return a list of output ports in LOCAL coordinates.
-
-        Returns
-        -------
-        List[Port]
-            Output ports transformed into global coordinates
-        """
-        # unpack reference port
-        x, y = port["center"]
-        tx, ty = port["tangent"]
-
-        # determine rotation angle from direction vector
-        angle = math.degrees(math.atan2(ty, tx))
-
-        # apply transform (move + rotate)
-        self.begin_group(f"translate({x},{y}) rotate({angle})")
-
-        # draw fitting in local space
-        local_ports = draw_func()
-
-        # close transform group
-        self.end_group()
-
-        # prepare transformation
-        cos_a = math.cos(math.radians(angle))
-        sin_a = math.sin(math.radians(angle))
-
-        global_ports: List[Port] = []
-
-        # convert local ports → global ports
-        for p in local_ports:
-            lx, ly = p["center"]
-            ltx, lty = p["tangent"]
-
-            # rotate + translate position
-            gx = x + lx * cos_a - ly * sin_a
-            gy = y + lx * sin_a + ly * cos_a
-
-            # rotate direction (no translation)
-            gtx = ltx * cos_a - lty * sin_a
-            gty = ltx * sin_a + lty * cos_a
-
-            global_ports.append(self.make_port(gx, gy, gtx, gty))
-
-        return global_ports
-
-    # =========================================================
-    # DRAWING PRIMITIVES
-    # =========================================================
-
-    def rect(
+    def _draw_excavation_lines(
         self,
-        x: float,
-        y: float,
-        w: float,
-        h: float,
-        fill: str | None = None,
-        stroke: str | None = None,
-        stroke_w: float | None = None,
-        dasharray: str | None = None,
-    ) -> None:
-        """
-        Draw rectangle.
-
-        Parameters
-        ----------
-        x, y : float
-            Top-left corner
-
-        w, h : float
-            Width and height
-        """
-        fill = fill if fill is not None else "none"
-        stroke = stroke if stroke is not None else "#000"
-        stroke_w = stroke_w if stroke_w is not None else self.sw
-        dash_attr = f' stroke-dasharray="{dasharray}"' if dasharray is not None else ""
-
-        self._lines.append(
-            f'<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" '
-            f'fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w:.2f}"{dash_attr}/>'
-        )
-
-
-    def circle(
-        self,
-        cx: float,
+        canvas: SVGCanvasType,
+        *,
         cy: float,
-        r: float,
-        fill: str | None = None,
-        stroke: str | None = None,
-        stroke_w: float | None = None,
+        block_left: float,
+        block_right: float,
+        x_min: float,
+        x_max: float,
+        trench_half_width: float,
     ) -> None:
-        """
-        Draw circle.
+        trench_stroke = "#333333"
+        edge_stroke_w = 1.6
+        hatch_stroke_w = 2.0
 
-        Parameters
-        ----------
-        cx, cy : float
-            Centre point
-
-        r : float
-            Radius
-        """
-        fill = fill if fill is not None else "none"
-        stroke = stroke if stroke is not None else "#000"
-        stroke_w = stroke_w if stroke_w is not None else self.sw
-
-        self._lines.append(
-            f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{r:.2f}" '
-            f'fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w:.2f}"/>'
-        )
-
-
-    def line(
-        self,
-        x1: float,
-        y1: float,
-        x2: float,
-        y2: float,
-        stroke: str = "#000",
-        stroke_w: float | None = None,
-        dasharray: str | None = None,
-        stroke_opacity: float | None = None,
-    ) -> None:
-        """Draw a line segment."""
-        stroke_w = stroke_w if stroke_w is not None else self.sw
-        attrs = [
-            f'x1="{x1:.2f}"',
-            f'y1="{y1:.2f}"',
-            f'x2="{x2:.2f}"',
-            f'y2="{y2:.2f}"',
-            f'stroke="{stroke}"',
-            f'stroke-width="{stroke_w:.2f}"',
-        ]
-        if dasharray is not None:
-            attrs.append(f'stroke-dasharray="{dasharray}"')
-        if stroke_opacity is not None:
-            attrs.append(f'stroke-opacity="{stroke_opacity:.2f}"')
-        self._lines.append(f"<line {' '.join(attrs)}/>")
-
-
-    def polygon(
-        self,
-        points: list[tuple[float, float]] | str,
-        fill: str | None = None,
-        stroke: str | None = None,
-        stroke_w: float | None = None,
-    ) -> None:
-        """Draw a polygon from point tuples or a preformatted points string."""
-        fill = fill if fill is not None else "none"
-        stroke = stroke if stroke is not None else "#000"
-        stroke_w = stroke_w if stroke_w is not None else self.sw
-
-        if isinstance(points, str):
-            points_str = points
-        else:
-            points_str = " ".join(f"{x:.2f},{y:.2f}" for x, y in points)
-
-        self._lines.append(
-            f'<polygon points="{points_str}" '
-            f'fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w:.2f}"/>'
-        )
-
-
-    def text(
-        self,
-        x: float,
-        y: float,
-        content: str,
-        fill: str = "#000",
-        font_size: float = 12,
-        font_family: str = "Arial, sans-serif",
-        text_anchor: str | None = None,
-        dominant_baseline: str | None = None,
-    ) -> None:
-        """Draw a text label."""
-        attrs = [
-            f'x="{x:.2f}"',
-            f'y="{y:.2f}"',
-            f'fill="{fill}"',
-            f'font-size="{font_size:.2f}"',
-            f'font-family="{font_family}"',
-        ]
-        if text_anchor is not None:
-            attrs.append(f'text-anchor="{text_anchor}"')
-        if dominant_baseline is not None:
-            attrs.append(f'dominant-baseline="{dominant_baseline}"')
-
-        self._lines.append(f"<text {' '.join(attrs)}>{content}</text>")
-
-
-    def draw_ground_level(
-        self,
-        x1: float,
-        y1: float,
-        x2: float,
-        y2: float,
-        spacing: float = 20,
-    ) -> None:
-        """
-        Draw ground level hatch line.
-        """
-        self._lines.append(
-            f'<line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" '
-            f'stroke="#000" stroke-width="{self.dsw:.2f}"/>'
-        )
-
-        dx = x2 - x1
-        dy = y2 - y1
-        length = (dx**2 + dy**2)**0.5
-        if length == 0:
+        left_end = min(block_left - 2.0, x_max)
+        right_start = max(block_right + 2.0, x_min)
+        if left_end <= x_min or x_max <= right_start:
             return
 
-        ux = dx / length
-        uy = dy / length
+        upper_y = cy - trench_half_width
+        lower_y = cy + trench_half_width
 
-        for i in range(int(length // spacing) + 1):
-            px = x1 + ux * i * spacing
-            py = y1 + uy * i * spacing
+        def _edge_points(x0: float, x1: float, y0: float, offsets: list[float]) -> list[tuple[float, float]]:
+            span = x1 - x0
+            fractions = [0.0, 0.20, 0.39, 0.58, 0.79, 1.0]
+            return [(x0 + span * fx, y0 + dy) for fx, dy in zip(fractions, offsets)]
 
-            ang = math.radians(120)
-            dx_tick = math.cos(ang) * ux - math.sin(ang) * uy
-            dy_tick = math.sin(ang) * ux + math.cos(ang) * uy
-
-            tick_length = spacing * 0.4
-            x_end = px + dx_tick * tick_length
-            y_end = py + dy_tick * tick_length
-
-            self._lines.append(
-                f'<line x1="{px:.2f}" y1="{py:.2f}" x2="{x_end:.2f}" y2="{y_end:.2f}" '
-                f'stroke="#000" stroke-width="{self.dsw:.2f}"/>'
+        def _draw_edge(points: list[tuple[float, float]]) -> None:
+            d = " ".join(
+                [f"M {points[0][0]:.2f},{points[0][1]:.2f}"]
+                + [f"L {x:.2f},{y:.2f}" for x, y in points[1:]]
             )
+            canvas.path(d=d, stroke=trench_stroke, stroke_w=edge_stroke_w, fill="none")
 
+        left_upper = _edge_points(x_min, left_end, upper_y, [0.0, 1.2, -0.9, 0.8, -0.5, 0.0])
+        left_lower = _edge_points(x_min, left_end, lower_y, [0.0, -1.1, 0.8, -0.7, 0.4, 0.0])
+        right_upper = _edge_points(right_start, x_max, upper_y, [0.0, -1.0, 0.9, -0.7, 0.5, 0.0])
+        right_lower = _edge_points(right_start, x_max, lower_y, [0.0, 1.1, -0.9, 0.7, -0.4, 0.0])
 
-    def draw_trench(self, x1: float, y1: float, x2: float, y2: float) -> None:
-        """
-        Draw trench box with dashed centreline.
-        """
-        self._lines.append(
-            f'<rect x="{x1:.2f}" y="{y1:.2f}" width="{(x2-x1):.2f}" height="{(y2-y1):.2f}" '
-            f'fill="none" stroke="#000" stroke-width="{self.dsw:.2f}"/>'
+        _draw_edge(left_upper)
+        _draw_edge(left_lower)
+        _draw_edge(right_upper)
+        _draw_edge(right_lower)
+
+        def _draw_hatch_group(x_anchor: float, y_anchor: float, above: bool, count: int = 4) -> None:
+            spacing = 8.0
+            dx = 7.0
+            dy = 7.0
+            y0 = y_anchor - 8.0 if above else y_anchor + 8.0
+            for idx in range(count):
+                x1 = x_anchor + idx * spacing
+                if above:
+                    y1 = y0
+                    x2 = x1 + dx
+                    y2 = y1 - dy
+                else:
+                    y1 = y0
+                    x2 = x1 + dx
+                    y2 = y1 + dy
+                canvas.line(x1, y1, x2, y2, stroke=trench_stroke, stroke_w=hatch_stroke_w)
+
+        left_span = left_end - x_min
+        right_span = x_max - right_start
+        _draw_hatch_group(x_min + left_span * 0.18, upper_y, above=True)
+        _draw_hatch_group(x_min + left_span * 0.16, lower_y, above=False)
+        _draw_hatch_group(right_start + right_span * 0.55, upper_y, above=True)
+        _draw_hatch_group(right_start + right_span * 0.56, lower_y, above=False)
+
+    def _build_plan(self) -> SVGDrawing:
+        canvas = SVGCanvas(scale=1.0, width=self._canvas_w, height=self._canvas_h)
+        m_to_px = 46.0
+        cx = self._canvas_w / 2
+        cy = self._canvas_h / 2
+        block_len_px = self._block.length * m_to_px
+        block_w = block_len_px
+        block_h = self._block.width * m_to_px
+        left = cx - block_w / 2
+        top = cy - block_h / 2
+
+        # Compose the taper assembly in plan using local fittings chained by ports.
+        pipe_large = self._taper.outside_diameter_large * m_to_px
+        pipe_small = self._taper.outside_diameter_small * m_to_px
+        taper_len = max(block_len_px * 0.2608695652173913, 1.2 * max(pipe_large, pipe_small))
+        flange_t = max(4.0, 0.12 * pipe_large)
+        flange_gap = max(3.0, 0.08 * pipe_small)
+        flange_pair_w = 2 * flange_t + flange_gap
+        socket_large_w = max(8.0, 0.40 * pipe_large)
+        socket_small_w = max(8.0, 0.40 * pipe_small)
+        pipe_overhang = max(block_len_px * 0.35, 2.0 * max(pipe_large, pipe_small))
+
+        taper_start_x = cx - taper_len / 2
+        taper_end_x = cx + taper_len / 2
+        left_outer_target = left - pipe_overhang
+        right_outer_target = left + block_w + pipe_overhang
+
+        upstream_len = max(
+            1.5 * pipe_large,
+            (taper_start_x - flange_pair_w - socket_large_w) - left_outer_target,
+        )
+        downstream_len = max(
+            1.5 * pipe_small,
+            right_outer_target - (taper_end_x + flange_pair_w + socket_small_w),
         )
 
-        cx = (x1 + x2) / 2
-        self._lines.append(
-            f'<line x1="{cx:.2f}" y1="{y1:.2f}" x2="{cx:.2f}" y2="{y2:.2f}" '
-            f'stroke="#000" stroke-dasharray="5,5" stroke-width="{self.dsw:.2f}"/>'
+        left_socket_start = taper_start_x - flange_pair_w - socket_large_w - upstream_len
+        left_pipe_start = left_socket_start + socket_large_w
+        left_flange_start = left_pipe_start + upstream_len
+        right_flange_start = taper_end_x
+        right_pipe_start = right_flange_start + flange_pair_w
+        right_socket_start = right_pipe_start + downstream_len
+
+        # Draw excavation edges/hatching outside the block before block and pipe geometry.
+        trench_half_width = min(block_h * 0.34, max(28.0, 1.55 * max(pipe_large, pipe_small)))
+        self._draw_excavation_lines(
+            canvas,
+            cy=cy,
+            block_left=left,
+            block_right=left + block_w,
+            x_min=left_outer_target,
+            x_max=right_outer_target,
+            trench_half_width=trench_half_width,
         )
 
-    # =========================================================
-    # OUTPUT
-    # =========================================================
+        canvas.rect(left, top, block_w, block_h, fill="#d9d9d9", stroke="black", stroke_w=2)
 
-    def save(self, filename: str = "output.svg") -> None:
-        """
-        Write SVG file.
-        """
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(
-                f'<svg xmlns="http://www.w3.org/2000/svg" '
-                f'width="{self.width}" height="{self.height}" '
-                f'viewBox="0 0 {self.width} {self.height}">\n'
+        # Draw the continuous upstream/downstream pipe runs first.
+        canvas.place_fitting_local(
+            canvas.make_port(left_pipe_start, cy, 1, 0),
+            lambda: draw_plan_pipe_segment(canvas, length_px=upstream_len, diameter_px=pipe_large),
+        )
+        canvas.place_fitting_local(
+            canvas.make_port(right_pipe_start, cy, 1, 0),
+            lambda: draw_plan_pipe_segment(canvas, length_px=downstream_len, diameter_px=pipe_small),
+        )
+
+        # Centre lines for the straight side-pipe runs on either side of taper.
+        canvas.line(left_pipe_start, cy, left_pipe_start + upstream_len, cy, stroke="#999999", stroke_w=1, dasharray="6,6", stroke_opacity=0.5)
+        canvas.line(right_pipe_start, cy, right_pipe_start + downstream_len, cy, stroke="#999999", stroke_w=1, dasharray="6,6", stroke_opacity=0.5)
+
+        # Draw the reducer body on top of the pipe runs.
+        canvas.place_fitting_local(
+            canvas.make_port(taper_start_x, cy, 1, 0),
+            lambda: taper_local(canvas, taper_len, pipe_large, pipe_small, wall=1.0),
+        )
+
+        # Draw joints/flanges last so they remain visually legible over the pipe.
+        canvas.place_fitting_local(
+            canvas.make_port(left_socket_start, cy, 1, 0),
+            lambda: draw_plan_single_socket(
+                canvas,
+                diameter_px=pipe_large,
+                socket_w_px=socket_large_w,
+                height_factor=1.12,
+            ),
+        )
+        canvas.place_fitting_local(
+            canvas.make_port(left_flange_start, cy, 1, 0),
+            lambda: draw_plan_double_flange(
+                canvas,
+                diameter_px=pipe_large,
+                flange_t_px=flange_t,
+                flange_gap_px=flange_gap,
+                height_factor=1.25,
+            ),
+        )
+        canvas.place_fitting_local(
+            canvas.make_port(right_flange_start, cy, 1, 0),
+            lambda: draw_plan_double_flange(
+                canvas,
+                diameter_px=pipe_small,
+                flange_t_px=flange_t,
+                flange_gap_px=flange_gap,
+                height_factor=1.25,
+            ),
+        )
+        canvas.place_fitting_local(
+            canvas.make_port(right_socket_start, cy, 1, 0),
+            lambda: draw_plan_single_socket(
+                canvas,
+                diameter_px=pipe_small,
+                socket_w_px=socket_small_w,
+                height_factor=1.12,
+            ),
+        )
+
+        draw_horizontal_dim(canvas, left, left + block_w, top + block_h + 34.0, f'L = {self._block.length:.1f} m')
+        w_dim_x = min(self._canvas_w - 12.0, max(left + block_w + 34.0, self._canvas_w - 26.0))
+        draw_vertical_dim(
+            canvas,
+            w_dim_x,
+            top,
+            top + block_h,
+            f'W = {self._block.width:.1f}m',
+            text_dx=-8.0,
+            text_anchor="end",
+        )
+        canvas.text(cx, self._canvas_h - 16, "Plan", fill="black", font_size=13, font_family="Arial, sans-serif", text_anchor="middle")
+        return _drawing_from_canvas("plan", canvas, view=DrawingView.PLAN, kind=DrawingKind.PLAN)
+
+    def _build_section(self) -> SVGDrawing:
+        canvas = SVGCanvas(scale=1.0, width=self._canvas_w, height=self._canvas_h)
+        m_to_px = 46.0
+        cx = self._canvas_w / 2
+        cy = self._canvas_h / 2
+        sec_w = self._block.width * m_to_px
+        sec_h = self._block.height * m_to_px
+        left = cx - sec_w / 2
+        top = cy - sec_h / 2
+        right = left + sec_w
+        bottom = top + sec_h
+        pipe_r = self._taper.outside_diameter_large * m_to_px / 2
+        crown_y = cy - pipe_r
+        ground_y = crown_y - self._depth_crown * m_to_px
+        gw_y = ground_y + self._gw_level * m_to_px
+        canvas.rect(left, top, sec_w, sec_h, fill="#d9d9d9", stroke="black", stroke_w=2)
+        canvas.line(20.0, ground_y, self._canvas_w - 20.0, ground_y, stroke="black", stroke_w=2)
+        canvas.line(20.0, gw_y, self._canvas_w - 20.0, gw_y, stroke="#42a5f5", stroke_w=1, dasharray="8,6")
+        canvas.circle(cx, cy, pipe_r, fill="white", stroke="black", stroke_w=2)
+        draw_vertical_dim(canvas, left - 56.0, ground_y, gw_y, f'Z_GW = {self._gw_level:.1f}m', color="#42a5f5", text_dx=-8.0, text_anchor="end")
+        draw_vertical_dim(canvas, cx + 28.0, ground_y, crown_y, f'Z_0 = {self._depth_crown:.1f}m')
+        draw_vertical_dim(canvas, right + 32.0, top, bottom, f'H = {self._block.height:.1f}m')
+        draw_vertical_dim(canvas, right + 98.0, ground_y, bottom, f'Z_b = {self._block.depth:.1f}m')
+        draw_horizontal_dim(canvas, left, right, bottom + 16.0, f'W = {self._block.width:.1f}m')
+        canvas.text(left + sec_w / 2, bottom + 64, "Section A-A", fill="black", font_size=13, font_family="Arial, sans-serif", text_anchor="middle")
+        return _drawing_from_canvas("section", canvas, view=DrawingView.SECTION, kind=DrawingKind.SECTION)
+
+
+class HorizontalBendSVGWriter:
+    @classmethod
+    def build(
+        cls,
+        calculation: HorizontalBendCalculationLike,
+        options: DrawingOptions | None = None,
+    ) -> list[SVGDrawing]:
+        options = options or DrawingOptions()
+        thrust_block = _require_thrust_block(calculation.soil_type)
+        _ = calculation.thrust_force_resultant
+        start_angle = options.start_angle_deg if options.start_angle_deg is not None else -(calculation.component.angle / 2)
+        return cls(
+            thrust_block=thrust_block,
+            bend=calculation.component,
+            canvas_w=options.canvas_width,
+            canvas_h=options.canvas_height,
+            depth_crown=calculation.crown_depth,
+            gw_level=calculation.soil_type.ground_water_level,
+            start_angle=start_angle,
+        ).drawings()
+
+    def __init__(
+        self,
+        thrust_block: ThrustBlockLike,
+        bend: BendLike,
+        canvas_w: int,
+        canvas_h: int,
+        depth_crown: float,
+        gw_level: float,
+        start_angle: float,
+    ) -> None:
+        self._block = thrust_block
+        self._bend = bend
+        self._canvas_w = canvas_w
+        self._canvas_h = canvas_h
+        self._depth_crown = depth_crown
+        self._gw_level = gw_level
+        self._start_angle = start_angle
+
+    def drawings(self) -> list[SVGDrawing]:
+        return [self._build_plan()]
+
+    def _build_plan(self) -> SVGDrawing:
+        canvas = SVGCanvas(scale=1.0, width=self._canvas_w, height=self._canvas_h)
+        m_to_px = 46.0
+        bend_diameter = self._bend.outside_diameter * m_to_px
+        bend_radius = max(bend_diameter * 1.35, 62.0)
+        bend_geometry = BendGeometry.from_params(radius_px=bend_radius, angle_deg=self._bend.angle)
+        plan_target = Point(canvas.centre.x, canvas.centre.y - 10.0)
+        thrust_angle_deg = math.degrees(math.atan2(bend_geometry.normalized_resultant_thrust_vector.y, bend_geometry.normalized_resultant_thrust_vector.x))
+        placement = FittingPlacement.anchor_at(
+            local_anchor=bend_geometry.arc_midpoint,
+            target=plan_target,
+            orientation_deg=-thrust_angle_deg,
+        )
+        bend_ports = self._draw_plan_bend_and_sockets(canvas, m_to_px, bend_diameter, bend_radius, bend_geometry, placement)
+        self._draw_plan_restraint(canvas, m_to_px, bend_diameter, bend_geometry, placement)
+        canvas.text(canvas.centre.x, self._canvas_h - 16.0, "Plan", fill="black", font_size=13, font_family="Arial, sans-serif", text_anchor="middle")
+        return _drawing_from_canvas("plan", canvas, view=DrawingView.PLAN, kind=DrawingKind.PLAN)
+
+    def _draw_plan_bend_and_sockets(
+        self,
+        canvas: SVGCanvasType,
+        m_to_px: float,
+        bend_diameter: float,
+        bend_radius: float,
+        bend_geometry: BendGeometryType,
+        placement: FittingPlacementType,
+    ) -> list[PortType]:
+        with canvas.group(placement.svg_transform()):
+            bend_local(canvas, radius_px=bend_radius, diameter_px=bend_diameter, angle_deg=self._bend.angle)
+        bend_ports = [placement.transform_port(bend_geometry.inlet_port), placement.transform_port(bend_geometry.outlet_port)]
+        inlet_port = bend_ports[0]
+        upstream_socket_length_px = 1.5 * m_to_px
+        canvas.place_fitting_local(
+            inlet_port,
+            lambda: socket_pipe_local(canvas, length=upstream_socket_length_px, diameter=bend_diameter, socket_length=upstream_socket_length_px * 0.15, socket_od=bend_diameter * 1.12, is_inlet=True),
+        )[0]
+        downstream_socket_length_px = 1.5 * m_to_px
+        downstream_socket_ports = canvas.place_fitting_local(
+            bend_ports[1],
+            lambda: socket_pipe_local(canvas, length=downstream_socket_length_px, diameter=bend_diameter, socket_length=downstream_socket_length_px * 0.15, socket_od=bend_diameter * 1.12, is_inlet=False, draw_barrel=False),
+        )
+        canvas.pipe_from_port(downstream_socket_ports[1], length=1.5 * m_to_px, diameter=bend_diameter)
+        return bend_ports
+
+    def _draw_plan_restraint(
+        self,
+        canvas: SVGCanvasType,
+        m_to_px: float,
+        bend_diameter: float,
+        bend_geometry: BendGeometryType,
+        placement: FittingPlacementType,
+    ) -> None:
+        contact_point = placement.transform_point(bend_geometry.arc_midpoint)
+        thrust_ux, thrust_uy = (1.0, 0.0)
+        wall_x = contact_point.x + thrust_ux * (bend_diameter / 2)
+        wall_y = contact_point.y + thrust_uy * (bend_diameter / 2)
+        block_length_px = self._block.length * m_to_px
+        block_width_px = self._block.width * m_to_px
+        block_cx = wall_x + thrust_ux * (block_length_px / 2)
+        block_cy = wall_y + thrust_uy * (block_length_px / 2)
+        block_vx = -thrust_uy
+        block_vy = thrust_ux
+        canvas.polygon(self._plan_block_points(block_cx, block_cy, block_vx, block_vy, thrust_ux, thrust_uy, block_width_px, block_length_px), fill="#d9d9d9", stroke="black", stroke_w=2)
+        self._draw_plan_arrow(canvas, wall_x, wall_y, thrust_ux, thrust_uy)
+
+    def _plan_block_points(self, block_cx: float, block_cy: float, block_vx: float, block_vy: float, thrust_ux: float, thrust_uy: float, block_width_px: float, block_length_px: float) -> list[tuple[float, float]]:
+        return [
+            (block_cx - block_vx * (block_width_px / 2) - thrust_ux * (block_length_px / 2), block_cy - block_vy * (block_width_px / 2) - thrust_uy * (block_length_px / 2)),
+            (block_cx + block_vx * (block_width_px / 2) - thrust_ux * (block_length_px / 2), block_cy + block_vy * (block_width_px / 2) - thrust_uy * (block_length_px / 2)),
+            (block_cx + block_vx * (block_width_px / 2) + thrust_ux * (block_length_px / 2), block_cy + block_vy * (block_width_px / 2) + thrust_uy * (block_length_px / 2)),
+            (block_cx - block_vx * (block_width_px / 2) + thrust_ux * (block_length_px / 2), block_cy - block_vy * (block_width_px / 2) + thrust_uy * (block_length_px / 2)),
+        ]
+
+    def _draw_plan_arrow(self, canvas: SVGCanvasType, wall_x: float, wall_y: float, thrust_ux: float, thrust_uy: float) -> None:
+        arrow_len = 92.0
+        head_len = 14.0
+        head_base_x = wall_x - thrust_ux * head_len
+        head_base_y = wall_y - thrust_uy * head_len
+        shaft_start_x = wall_x - thrust_ux * arrow_len
+        shaft_start_y = wall_y - thrust_uy * arrow_len
+        canvas.line(shaft_start_x, shaft_start_y, head_base_x, head_base_y, stroke="#d32f2f", stroke_w=2.3)
+        canvas.polygon([(wall_x, wall_y), (head_base_x - thrust_uy * 7.0, head_base_y + thrust_ux * 7.0), (head_base_x + thrust_uy * 7.0, head_base_y - thrust_ux * 7.0)], fill="#d32f2f", stroke="#d32f2f", stroke_w=1)
+        canvas.text(shaft_start_x - 16.0, (shaft_start_y + head_base_y) / 2, "T", fill="#d32f2f", font_size=18, font_family="Arial, sans-serif", text_anchor="middle", dominant_baseline="middle")
+
+    def _build_section(self) -> SVGDrawing:
+        canvas = SVGCanvas(scale=1.0, width=self._canvas_w, height=self._canvas_h)
+        m_to_px = 46.0
+        cx = self._canvas_w / 2
+        cy = self._canvas_h / 2
+        sec_w = self._block.width * m_to_px
+        sec_h = self._block.height * m_to_px
+        left = cx - sec_w / 2
+        top = cy - sec_h / 2
+        right = left + sec_w
+        bottom = top + sec_h
+        pipe_r = self._bend.outside_diameter * m_to_px / 2
+        crown_y = cy - pipe_r
+        ground_y = crown_y - self._depth_crown * m_to_px
+        gw_y = ground_y + self._gw_level * m_to_px
+        canvas.rect(left, top, sec_w, sec_h, fill="#d9d9d9", stroke="black", stroke_w=2)
+        canvas.line(20.0, ground_y, self._canvas_w - 20.0, ground_y, stroke="black", stroke_w=2)
+        canvas.line(20.0, gw_y, self._canvas_w - 20.0, gw_y, stroke="#42a5f5", stroke_w=1, dasharray="8,6")
+        canvas.circle(cx, cy, pipe_r, fill="white", stroke="black", stroke_w=2)
+        draw_vertical_dim(canvas, left - 56.0, ground_y, gw_y, f'Z_GW = {self._gw_level:.1f}m', color="#42a5f5", text_dx=-8.0, text_anchor="end")
+        draw_vertical_dim(canvas, cx + 28.0, ground_y, crown_y, f'Z_0 = {self._depth_crown:.1f}m')
+        draw_vertical_dim(canvas, right + 32.0, top, bottom, f'H = {self._block.height:.1f}m')
+        draw_vertical_dim(canvas, right + 98.0, ground_y, bottom, f'Z_b = {(bottom - ground_y) / m_to_px:.1f}m')
+        draw_horizontal_dim(canvas, left, right, bottom + 16.0, f'W = {self._block.width:.1f}m')
+        canvas.text(left + sec_w / 2, bottom + 64, "Section A-A", fill="black", font_size=13, font_family="Arial, sans-serif", text_anchor="middle")
+        return _drawing_from_canvas("section", canvas, view=DrawingView.SECTION, kind=DrawingKind.SECTION)
+
+    def _normalized_components(self, x: float, y: float) -> tuple[float, float]:
+        length = math.hypot(x, y)
+        if length == 0:
+            return (1.0, 0.0)
+        return (x / length, y / length)
+
+
+class VerticalBendSVGWriter:
+    @classmethod
+    def build(
+        cls,
+        calculation: VerticalBendCalculationLike,
+        options: DrawingOptions | None = None,
+    ) -> list[SVGDrawing]:
+        options = options or DrawingOptions()
+        thrust_block = _require_thrust_block(calculation.soil_type)
+        _ = calculation.thrust_force_resultant
+        bend_orientation = options.bend_orientation_deg if options.bend_orientation_deg is not None else 90.0
+        return cls(
+            thrust_block=thrust_block,
+            bend=calculation.component,
+            canvas_w=options.canvas_width,
+            canvas_h=options.canvas_height,
+            depth_crown=calculation.crown_depth,
+            gw_level=calculation.soil_type.ground_water_level,
+            bend_orientation=bend_orientation,
+        ).drawings()
+
+    def __init__(
+        self,
+        thrust_block: ThrustBlockLike,
+        bend: BendLike,
+        canvas_w: int,
+        canvas_h: int,
+        depth_crown: float,
+        gw_level: float,
+        bend_orientation: float = 90.0,
+    ) -> None:
+        self._block = thrust_block
+        self._bend = bend
+        self._canvas_w = canvas_w
+        self._canvas_h = canvas_h
+        self._depth_crown = depth_crown
+        self._gw_level = gw_level
+        self._bend_orientation = bend_orientation
+
+    def drawings(self) -> list[SVGDrawing]:
+        return [self._build_longitudinal_section()]
+
+    def downturn_drawings(self) -> list[SVGDrawing]:
+        return [self._build_downturn_longitudinal_section()]
+
+    def _build_longitudinal_section(self) -> SVGDrawing:
+        canvas = SVGCanvas(scale=1.0, width=self._canvas_w, height=self._canvas_h)
+        m_to_px = 46.0
+        # Keep the thrust-block arrangement fixed to the approved template,
+        # while letting the bend itself follow the requested angle.
+        block_template_angle_deg = 45.0
+        bend_diameter = self._bend.outside_diameter * m_to_px
+        bend_radius = max(bend_diameter * 1.35, 62.0)
+        bend_geometry = BendGeometry.from_params(radius_px=bend_radius, angle_deg=self._bend.angle)
+        bend_contact_x = bend_geometry.arc_midpoint.x + bend_geometry.outside_radial_direction.x * (bend_diameter / 2)
+        bend_contact_y = bend_geometry.arc_midpoint.y + bend_geometry.outside_radial_direction.y * (bend_diameter / 2)
+        placement = FittingPlacement.anchor_at(
+            local_anchor=bend_geometry.arc_midpoint,
+            target=canvas.centre,
+            orientation_deg=self._bend_orientation - 90.0,
+        )
+
+        inlet_wall_point_a = placement.transform_point(Point(bend_geometry.inlet_point.x, bend_geometry.inlet_point.y - (bend_diameter / 2)))
+        inlet_wall_point_b = placement.transform_point(Point(bend_geometry.inlet_point.x, bend_geometry.inlet_point.y + (bend_diameter / 2)))
+        # Z0 must terminate at the *upper* inlet crown point in global section coordinates.
+        inlet_crown_global = inlet_wall_point_a if inlet_wall_point_a.y <= inlet_wall_point_b.y else inlet_wall_point_b
+        z0_dim_x = inlet_crown_global.x
+        crown_y = inlet_crown_global.y
+        ground_y = crown_y - self._depth_crown * m_to_px
+        gw_y = ground_y + self._gw_level * m_to_px
+        canvas.line(20.0, ground_y, self._canvas_w - 20.0, ground_y, stroke="black", stroke_w=2)
+        canvas.line(20.0, gw_y, self._canvas_w - 20.0, gw_y, stroke="#42a5f5", stroke_w=1, dasharray="8,6")
+
+        ground_marker_x = 56.0
+        ground_marker_half_w = 6.0
+        ground_marker_h = 8.0
+        canvas.polygon(
+            [
+                (ground_marker_x - ground_marker_half_w, ground_y - ground_marker_h),
+                (ground_marker_x + ground_marker_half_w, ground_y - ground_marker_h),
+                (ground_marker_x, ground_y),
+            ],
+            fill="black",
+            stroke="black",
+            stroke_w=1,
+        )
+        canvas.text(
+            ground_marker_x + 12.0,
+            ground_y - 10.0,
+            "Ground Level",
+            fill="black",
+            font_size=12,
+            font_family="Arial, sans-serif",
+            text_anchor="start",
+            dominant_baseline="middle",
+        )
+
+        # Keep T anchored at the bend contact and place the thrust block so the
+        # diagonal-cut midpoint matches that fixed anchor for each bend angle.
+        thrust_anchor_x = bend_contact_x
+        thrust_anchor_y = bend_contact_y
+        _, _, thrust_dir_x, thrust_dir_y = _upturn_cut_and_thrust_unit_vectors(self._bend.angle)
+
+        with canvas.group(placement.svg_transform()):
+            contact_x, contact_y, block_left, block_right, block_top, block_bottom = thrust_block_for_upturn_bend_local(
+                canvas,
+                radius_px=bend_radius,
+                diameter_px=bend_diameter,
+                angle_deg=block_template_angle_deg,
+                block_width_px=self._block.length * m_to_px,
+                block_height_px=self._block.height * m_to_px,
+                cut_midpoint=(thrust_anchor_x, thrust_anchor_y),
+                cut_angle_deg=self._bend.angle,
             )
-            f.write("\n".join(self._lines))
-            f.write("\n</svg>")
+            bend_ports = bend_local(
+                canvas,
+                radius_px=bend_radius,
+                diameter_px=bend_diameter,
+                angle_deg=self._bend.angle,
+            )
+            inlet_socket_length_px = 1.25 * m_to_px
+            canvas.place_fitting_local(
+                bend_ports[0],
+                lambda: socket_pipe_local(
+                    canvas,
+                    length=inlet_socket_length_px,
+                    diameter=bend_diameter,
+                    socket_length=inlet_socket_length_px * 0.18,
+                    socket_od=bend_diameter * 1.12,
+                    is_inlet=True,
+                ),
+            )
+            outlet_socket_length_px = 1.25 * m_to_px
+            outlet_socket_ports = canvas.place_fitting_local(
+                bend_ports[1],
+                lambda: socket_pipe_local(
+                    canvas,
+                    length=outlet_socket_length_px,
+                    diameter=bend_diameter,
+                    socket_length=outlet_socket_length_px * 0.18,
+                    socket_od=bend_diameter * 1.12,
+                    is_inlet=False,
+                    draw_barrel=False,
+                ),
+            )
+            canvas.pipe_from_port(outlet_socket_ports[1], length=1.1 * m_to_px, diameter=bend_diameter)
+            thrust_component_arrows_for_bend_local(
+                canvas,
+                origin_x=thrust_anchor_x,
+                origin_y=thrust_anchor_y,
+                tx_len_px=56.0,
+                tz_len_px=56.0,
+                t_len_px=82.0,
+                t_direction_x=thrust_dir_x,
+                t_direction_y=thrust_dir_y,
+                component_dasharray="6,4",
+            )
+
+        block_points = [
+            placement.transform_point(Point(block_left, block_top)),
+            placement.transform_point(Point(block_right, block_top)),
+            placement.transform_point(Point(block_right, block_bottom)),
+            placement.transform_point(Point(block_left, block_bottom)),
+        ]
+        block_global_left = min(point.x for point in block_points)
+        block_global_right = max(point.x for point in block_points)
+        block_global_top = min(point.y for point in block_points)
+        block_global_bottom = max(point.y for point in block_points)
+
+        # Keep the longitudinal L-dimension line below the thrust-arrow envelope.
+        t_tip_local = Point(thrust_anchor_x + (82.0 * thrust_dir_x), thrust_anchor_y + (82.0 * thrust_dir_y))
+        tz_label_len = math.hypot(4.0, 14.0)
+        tz_tip_local = Point(thrust_anchor_x, thrust_anchor_y + 56.0)
+        tz_label_anchor_local = Point(
+            tz_tip_local.x + (4.0 / tz_label_len) * 12.0,
+            tz_tip_local.y + (14.0 / tz_label_len) * 12.0,
+        )
+        t_label_len = math.hypot(thrust_dir_x, thrust_dir_y)
+        t_label_anchor_local = Point(
+            t_tip_local.x + (thrust_dir_x / t_label_len) * 12.0,
+            t_tip_local.y + (thrust_dir_y / t_label_len) * 12.0,
+        )
+        arrow_envelope_points = [
+            placement.transform_point(Point(thrust_anchor_x + 56.0, thrust_anchor_y)),
+            placement.transform_point(Point(thrust_anchor_x, thrust_anchor_y + 56.0)),
+            placement.transform_point(t_tip_local),
+            placement.transform_point(tz_label_anchor_local),
+            placement.transform_point(t_label_anchor_local),
+        ]
+        arrow_envelope_max_y = max(point.y for point in arrow_envelope_points) + 10.0
+        l_dim_y = max(block_global_bottom + 16.0, arrow_envelope_max_y + 20.0)
+
+        draw_vertical_dim(canvas, block_global_left - 50.0, ground_y, gw_y, f'Z_GW = {self._gw_level:.1f}m', color="#42a5f5", text_dx=-8.0, text_anchor="end")
+        draw_vertical_dim(canvas, z0_dim_x, ground_y, crown_y, f'Z_0 = {self._depth_crown:.1f}m')
+        draw_vertical_dim(canvas, block_global_right + 30.0, block_global_top, block_global_bottom, f'H = {self._block.height:.1f}m')
+        draw_vertical_dim(canvas, block_global_right + 96.0, ground_y, block_global_bottom, f'Z_b = {self._block.depth:.1f}m')
+        draw_horizontal_dim(
+            canvas,
+            block_global_left,
+            block_global_right,
+            l_dim_y,
+            f'L = {self._block.length:.1f}m',
+            label_padding_px=18.0,
+        )
+        canvas.text(
+            canvas.centre.x,
+            self._canvas_h - 16.0,
+            "Vertical Upturn Bend",
+            fill="black",
+            font_size=13,
+            font_family="Arial, sans-serif",
+            text_anchor="middle",
+        )
+
+        return _drawing_from_canvas(
+            "section",
+            canvas,
+            view=DrawingView.SECTION,
+            kind=DrawingKind.VERTICAL_UPTURN_LONGITUDINAL,
+        )
+
+    def _build_section_a_a(self) -> SVGDrawing:
+        canvas = SVGCanvas(scale=1.0, width=self._canvas_w, height=self._canvas_h)
+        m_to_px = 46.0
+        cx = self._canvas_w / 2
+        cy = self._canvas_h / 2
+        sec_w = self._block.width * m_to_px
+        sec_h = self._block.height * m_to_px
+        left = cx - sec_w / 2
+        top = cy - sec_h / 2
+        right = left + sec_w
+        bottom = top + sec_h
+        pipe_r = self._bend.outside_diameter * m_to_px / 2
+        crown_y = cy - pipe_r
+        ground_y = crown_y - self._depth_crown * m_to_px
+        gw_y = ground_y + self._gw_level * m_to_px
+        canvas.rect(left, top, sec_w, sec_h, fill="#d9d9d9", stroke="black", stroke_w=2)
+        canvas.line(20.0, ground_y, self._canvas_w - 20.0, ground_y, stroke="black", stroke_w=2)
+        canvas.line(20.0, gw_y, self._canvas_w - 20.0, gw_y, stroke="#42a5f5", stroke_w=1, dasharray="8,6")
+        canvas.circle(cx, cy, pipe_r, fill="white", stroke="black", stroke_w=2)
+        draw_vertical_dim(canvas, left - 56.0, ground_y, gw_y, f'Z_GW = {self._gw_level:.1f}m', color="#42a5f5", text_dx=-8.0, text_anchor="end")
+        draw_vertical_dim(canvas, cx + 28.0, ground_y, crown_y, f'Z_0 = {self._depth_crown:.1f}m')
+        draw_vertical_dim(canvas, right + 32.0, top, bottom, f'H = {self._block.height:.1f}m')
+        draw_vertical_dim(canvas, right + 98.0, ground_y, bottom, f'Z_b = {(bottom - ground_y) / m_to_px:.1f}m')
+        draw_horizontal_dim(canvas, left, right, bottom + 16.0, f'W = {self._block.width:.1f}m')
+        canvas.text(left + sec_w / 2, bottom + 64, "Section A-A", fill="black", font_size=13, font_family="Arial, sans-serif", text_anchor="middle")
+        return _drawing_from_canvas(
+            "section_a_a",
+            canvas,
+            view=DrawingView.SECTION,
+            kind=DrawingKind.THRUST_BLOCK_SECTION_A_A,
+        )
+
+    def _build_downturn_longitudinal_section(self) -> SVGDrawing:
+        canvas = SVGCanvas(scale=1.0, width=self._canvas_w, height=self._canvas_h)
+        m_to_px = 46.0
+        bend_diameter = self._bend.outside_diameter * m_to_px
+        bend_radius = max(bend_diameter * 1.35, 62.0)
+        bend_geometry = BendGeometry.from_params(radius_px=bend_radius, angle_deg=self._bend.angle)
+
+        # Rotate the local upturn bend geometry into a downturn profile and keep
+        # the bend midpoint anchored at canvas centre.
+        placement = FittingPlacement.anchor_at(
+            local_anchor=bend_geometry.arc_midpoint,
+            target=canvas.centre,
+            orientation_deg=-180.0,
+        )
+
+        inlet_center_global = placement.transform_point(bend_geometry.inlet_point)
+        inlet_wall_point_a = placement.transform_point(Point(bend_geometry.inlet_point.x, bend_geometry.inlet_point.y - (bend_diameter / 2)))
+        inlet_wall_point_b = placement.transform_point(Point(bend_geometry.inlet_point.x, bend_geometry.inlet_point.y + (bend_diameter / 2)))
+        z0_dim_x = inlet_center_global.x + max(14.0, 0.30 * m_to_px)
+        crown_y = min(inlet_wall_point_a.y, inlet_wall_point_b.y)
+        ground_y = crown_y - self._depth_crown * m_to_px
+        gw_y = ground_y + self._gw_level * m_to_px
+
+        canvas.line(20.0, ground_y, self._canvas_w - 20.0, ground_y, stroke="black", stroke_w=2)
+        canvas.line(20.0, gw_y, self._canvas_w - 20.0, gw_y, stroke="#42a5f5", stroke_w=1, dasharray="8,6")
+
+        ground_marker_x = 56.0
+        ground_marker_half_w = 6.0
+        ground_marker_h = 8.0
+        canvas.polygon(
+            [
+                (ground_marker_x - ground_marker_half_w, ground_y - ground_marker_h),
+                (ground_marker_x + ground_marker_half_w, ground_y - ground_marker_h),
+                (ground_marker_x, ground_y),
+            ],
+            fill="black",
+            stroke="black",
+            stroke_w=1,
+        )
+        canvas.text(
+            ground_marker_x + 12.0,
+            ground_y - 10.0,
+            "Ground level",
+            fill="black",
+            font_size=12,
+            font_family="Arial, sans-serif",
+            text_anchor="start",
+            dominant_baseline="middle",
+        )
+
+        block_len_px = self._block.length * m_to_px
+        block_h_px = self._block.height * m_to_px
+        block_local_left = bend_geometry.arc_midpoint.x - (block_len_px / 2)
+        block_local_right = bend_geometry.arc_midpoint.x + (block_len_px / 2)
+        block_local_top = bend_geometry.arc_midpoint.y - (block_h_px / 2)
+        block_local_bottom = bend_geometry.arc_midpoint.y + (block_h_px / 2)
+
+        with canvas.group(placement.svg_transform()):
+            # Draw concrete as an enclosing block around the fitting footprint,
+            # matching the taper-thrust style arrangement.
+            canvas.rect(
+                block_local_left,
+                block_local_top,
+                block_local_right - block_local_left,
+                block_local_bottom - block_local_top,
+                fill="#d9d9d9",
+                stroke="black",
+                stroke_w=2,
+            )
+
+            bend_ports = bend_local(
+                canvas,
+                radius_px=bend_radius,
+                diameter_px=bend_diameter,
+                angle_deg=self._bend.angle,
+            )
+
+            flange_projection_px = max(7.0, 0.18 * m_to_px)
+            flange_thickness_px = max(6.0, 0.14 * m_to_px)
+
+            inlet_flange_ports = canvas.place_fitting_local(
+                bend_ports[0],
+                lambda: flange_local(
+                    canvas,
+                    diameter_px=bend_diameter,
+                    projection_px=flange_projection_px,
+                    thickness_px=flange_thickness_px,
+                    flange_width_ratio=1.2,
+                ),
+            )
+            canvas.pipe_from_port(inlet_flange_ports[0], length=1.0 * m_to_px, diameter=bend_diameter)
+
+            outlet_flange_ports = canvas.place_fitting_local(
+                bend_ports[1],
+                lambda: flange_local(
+                    canvas,
+                    diameter_px=bend_diameter,
+                    projection_px=flange_projection_px,
+                    thickness_px=flange_thickness_px,
+                    flange_width_ratio=1.2,
+                ),
+            )
+            canvas.pipe_from_port(outlet_flange_ports[1], length=1.0 * m_to_px, diameter=bend_diameter)
+
+            reinforcement_margin_x = min(24.0, max(10.0, block_len_px * 0.10))
+            reinforcement_margin_y = min(20.0, max(8.0, block_h_px * 0.10))
+            inner_left = block_local_left + reinforcement_margin_x
+            inner_right = block_local_right - reinforcement_margin_x
+            inner_top = block_local_top + reinforcement_margin_y
+            inner_bottom = block_local_bottom - reinforcement_margin_y
+
+            if inner_right > inner_left and inner_bottom > inner_top:
+                canvas.rect(
+                    inner_left,
+                    inner_top,
+                    inner_right - inner_left,
+                    inner_bottom - inner_top,
+                    fill="none",
+                    stroke="#4d4d4d",
+                    stroke_w=1.2,
+                    dasharray="6,5",
+                )
+
+            contact_x = bend_geometry.arc_midpoint.x
+            contact_y = bend_geometry.arc_midpoint.y
+            thrust_component_arrows_for_bend_local(
+                canvas,
+                origin_x=contact_x,
+                origin_y=contact_y,
+                tx_len_px=56.0,
+                tz_len_px=56.0,
+                t_len_px=82.0,
+                t_direction_x=bend_geometry.normalized_resultant_thrust_vector.x,
+                t_direction_y=bend_geometry.normalized_resultant_thrust_vector.y,
+                label_rotation_deg=180.0,
+            )
+
+        block_global_left = canvas.centre.x - (block_len_px / 2)
+        block_global_right = canvas.centre.x + (block_len_px / 2)
+        block_global_top = canvas.centre.y - (block_h_px / 2)
+        block_global_bottom = canvas.centre.y + (block_h_px / 2)
+
+        t_direction_len = math.hypot(1.0, 1.0)
+        t_tip_local = Point(contact_x + (82.0 / t_direction_len), contact_y + (82.0 / t_direction_len))
+        tz_label_len = math.hypot(4.0, 14.0)
+        tz_tip_local = Point(contact_x, contact_y + 56.0)
+        tz_label_anchor_local = Point(
+            tz_tip_local.x + (4.0 / tz_label_len) * 12.0,
+            tz_tip_local.y + (14.0 / tz_label_len) * 12.0,
+        )
+        t_label_len = math.hypot(8.0, 12.0)
+        t_label_anchor_local = Point(
+            t_tip_local.x + (8.0 / t_label_len) * 12.0,
+            t_tip_local.y + (12.0 / t_label_len) * 12.0,
+        )
+        arrow_envelope_points = [
+            placement.transform_point(Point(contact_x + 56.0, contact_y)),
+            placement.transform_point(Point(contact_x, contact_y + 56.0)),
+            placement.transform_point(t_tip_local),
+            placement.transform_point(tz_label_anchor_local),
+            placement.transform_point(t_label_anchor_local),
+        ]
+        arrow_envelope_max_y = max(point.y for point in arrow_envelope_points) + 10.0
+        l_dim_y = max(block_global_bottom + 16.0, arrow_envelope_max_y + 20.0)
+
+        draw_vertical_dim(canvas, block_global_left - 50.0, ground_y, gw_y, f'Z_GW = {self._gw_level:.1f}m', color="#42a5f5", text_dx=-8.0, text_anchor="end")
+        draw_vertical_dim(canvas, z0_dim_x, ground_y, crown_y, f'Z_0 = {self._depth_crown:.1f}m')
+        draw_vertical_dim(canvas, block_global_right + 30.0, block_global_top, block_global_bottom, f'H = {self._block.height:.1f}m')
+        z_b_drawn_m = (block_global_bottom - ground_y) / m_to_px
+        draw_vertical_dim(canvas, block_global_right + 96.0, ground_y, block_global_bottom, f'Z_b = {z_b_drawn_m:.1f}m')
+        draw_horizontal_dim(
+            canvas,
+            block_global_left,
+            block_global_right,
+            l_dim_y,
+            f'L = {self._block.length:.1f}m',
+            label_padding_px=18.0,
+        )
+        canvas.text(
+            canvas.centre.x,
+            self._canvas_h - 16.0,
+            "Vertical Downturn Bend",
+            fill="black",
+            font_size=13,
+            font_family="Arial, sans-serif",
+            text_anchor="middle",
+        )
+
+        return _drawing_from_canvas(
+            "section_downturn",
+            canvas,
+            view=DrawingView.SECTION,
+            kind=DrawingKind.VERTICAL_DOWNTURN_LONGITUDINAL,
+        )
 
 
-def _canvas_svg_string(canvas: SVGCanvas) -> str:
-    """Serialize a canvas to a standalone SVG document string."""
-    return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" '
-        f'width="{canvas.width}" height="{canvas.height}" '
-        f'viewBox="0 0 {canvas.width} {canvas.height}">\n'
-        + "\n".join(canvas._lines)
-        + "\n</svg>"
-    )
+class VerticalDownturnBendSVGWriter(VerticalBendSVGWriter):
+    @classmethod
+    def build(
+        cls,
+        calculation: VerticalBendCalculationLike,
+        options: DrawingOptions | None = None,
+    ) -> list[SVGDrawing]:
+        options = options or DrawingOptions()
+        thrust_block = _require_thrust_block(calculation.soil_type)
+        _ = calculation.thrust_force_resultant
+        bend_orientation = options.bend_orientation_deg if options.bend_orientation_deg is not None else 90.0
+        return cls(
+            thrust_block=thrust_block,
+            bend=calculation.component,
+            canvas_w=options.canvas_width,
+            canvas_h=options.canvas_height,
+            depth_crown=calculation.crown_depth,
+            gw_level=calculation.soil_type.ground_water_level,
+            bend_orientation=bend_orientation,
+        ).downturn_drawings()
 
 
 def socket_pipe_local(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     length: float,
     diameter: float,
     socket_length: float,
     socket_od: float,
     is_inlet: bool = True,
     draw_barrel: bool = True,
-) -> list[Port]:
+) -> list[PortType]:
     """
     Socketed pipe section in local coordinates.
 
@@ -606,11 +1306,11 @@ def socket_pipe_local(
 
 
 def bend_local(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     radius_px: float,
     diameter_px: float,
     angle_deg: float,
-) -> list[Port]:
+) -> list[PortType]:
     """
     Upturn bend in LOCAL coordinates.
 
@@ -619,62 +1319,46 @@ def bend_local(
 
     Positive angle bends upward in screen space (negative SVG Y).
     """
-
-    theta = math.radians(angle_deg)
-
-    end_x = radius_px * math.sin(theta)
-    end_y = -radius_px * (1 - math.cos(theta))
-
-    path = (
-        f"M 0 0 "
-        f"A {radius_px:.2f} {radius_px:.2f} "
-        f"0 0 0 "
-        f"{end_x:.2f} {end_y:.2f}"
-    )
+    geometry = BendGeometry.from_params(radius_px=radius_px, angle_deg=angle_deg)
 
     outline_width = 2
 
     # Bend outline
-    canvas._lines.append(
-        f'<path d="{path}" '
-        f'stroke="black" '
-        f'stroke-width="{diameter_px + outline_width:.2f}" '
-        f'fill="none" '
-        f'stroke-linecap="butt"/>'
+    canvas.path(
+        geometry.path_d,
+        stroke="black",
+        stroke_w=diameter_px + outline_width,
+        fill="none",
+        stroke_linecap="butt",
     )
 
     # Bend body
-    canvas._lines.append(
-        f'<path d="{path}" '
-        f'stroke="white" '
-        f'stroke-width="{diameter_px - outline_width:.2f}" '
-        f'fill="none" '
-        f'stroke-linecap="butt"/>'
+    canvas.path(
+        geometry.path_d,
+        stroke="white",
+        stroke_w=diameter_px - outline_width,
+        fill="none",
+        stroke_linecap="butt",
     )
 
     # Centreline
-    canvas._lines.append(
-        f'<path d="{path}" '
-        f'stroke="#999999" '
-        f'stroke-width="1" '
-        f'stroke-dasharray="6,6" '
-        f'stroke-opacity="0.5" '
-        f'fill="none"/>'
+    canvas.path(
+        geometry.path_d,
+        stroke="#999999",
+        stroke_w=1,
+        dasharray="6,6",
+        stroke_opacity=0.5,
+        fill="none",
     )
 
     return [
-        canvas.make_port(0, 0, 1, 0),
-        canvas.make_port(
-            end_x,
-            end_y,
-            math.cos(theta),
-            -math.sin(theta),
-        ),
+        canvas.make_port(geometry.inlet_point.x, geometry.inlet_point.y, geometry.inlet_tangent.x, geometry.inlet_tangent.y),
+        canvas.make_port(geometry.outlet_point.x, geometry.outlet_point.y, geometry.outlet_tangent.x, geometry.outlet_tangent.y),
     ]
 
 
 def thrust_component_arrows_for_bend_local(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     origin_x: float,
     origin_y: float,
     tx_len_px: float,
@@ -684,6 +1368,8 @@ def thrust_component_arrows_for_bend_local(
     t_direction_y: float = 1,
     stroke: str = "#d32f2f",
     stroke_width: float = 1.5,
+    label_rotation_deg: float | None = None,
+    component_dasharray: str | None = None,
 ) -> None:
     """Draw Tx, Tz and resultant T arrows in red schematic style."""
 
@@ -723,16 +1409,20 @@ def thrust_component_arrows_for_bend_local(
 
         line_dash_attr = f' stroke-dasharray="{line_dasharray}"' if line_dasharray else ""
 
-        canvas._lines.append(
-            f'<line x1="{x1:.2f}" y1="{y1:.2f}" '
-            f'x2="{base_x:.2f}" y2="{base_y:.2f}" '
-            f'stroke="{stroke}" stroke-width="{stroke_width:.2f}"{line_dash_attr}/>'
+        canvas.line(
+            x1,
+            y1,
+            base_x,
+            base_y,
+            stroke=stroke,
+            stroke_w=stroke_width,
+            dasharray=line_dasharray,
         )
-        canvas._lines.append(
-            f'<polygon points="{x2:.2f},{y2:.2f} '
-            f'{left_x:.2f},{left_y:.2f} '
-            f'{right_x:.2f},{right_y:.2f}" '
-            f'fill="{stroke}" stroke="{stroke}" stroke-width="1"/>'
+        canvas.polygon(
+            [(x2, y2), (left_x, left_y), (right_x, right_y)],
+            fill=stroke,
+            stroke=stroke,
+            stroke_w=1,
         )
 
         # Keep a fixed gap between arrow tip and label while preserving label direction.
@@ -746,30 +1436,69 @@ def thrust_component_arrows_for_bend_local(
         label_x = x2 + label_ux * label_padding_px
         label_y = y2 + label_uy * label_padding_px
 
-        canvas._lines.append(
-            f'<text x="{label_x:.2f}" y="{label_y:.2f}" '
-            f'fill="{stroke}" font-size="11" font-family="Arial, sans-serif" '
-            f'text-anchor="middle" dominant-baseline="middle">{label}</text>'
+        canvas.text(
+            label_x,
+            label_y,
+            label,
+            fill=stroke,
+            font_size=11,
+            font_family="Arial, sans-serif",
+            text_anchor="middle",
+            dominant_baseline="middle",
+            transform=(f"rotate({label_rotation_deg:.1f} {label_x:.2f} {label_y:.2f})" if label_rotation_deg is not None else None),
         )
 
-    _draw_arrow(origin_x, origin_y, 1, 0, tx_len_px, "T_x", 1, 0, line_dasharray="6,4")
-    _draw_arrow(origin_x, origin_y, 0, 1, tz_len_px, "T_z", 4, 14, line_dasharray="6,4")
+    _draw_arrow(origin_x, origin_y, 1, 0, tx_len_px, "T_x", 1, 0, line_dasharray=component_dasharray)
+    _draw_arrow(origin_x, origin_y, 0, 1, tz_len_px, "T_z", 4, 14, line_dasharray=component_dasharray)
     _draw_arrow(origin_x, origin_y, t_direction_x, t_direction_y, t_len_px, "T", 8, 12)
 
 
+def _upturn_cut_and_thrust_unit_vectors(theta_deg: float) -> tuple[float, float, float, float]:
+    """Return cut-face and thrust unit vectors for a vertical upturn bend.
+
+    For bend angle theta, the diagonal cut uses theta/2 and T is taken from the
+    cut normal so T is always perpendicular to the cut face.
+    """
+
+    theta = math.radians(theta_deg)
+    half_theta = theta / 2.0
+
+    # SVG local axes: +x right, +y down.
+    cut_ux = -math.cos(half_theta)
+    cut_uy = math.sin(half_theta)
+
+    normal_a = (-cut_uy, cut_ux)
+    normal_b = (cut_uy, -cut_ux)
+
+    # Align the selected normal with the bend resultant direction.
+    resultant_x = 1.0 - math.cos(theta)
+    resultant_y = math.sin(theta)
+    resultant_len = math.hypot(resultant_x, resultant_y)
+    if resultant_len > 0.0:
+        resultant_x /= resultant_len
+        resultant_y /= resultant_len
+
+    dot_a = (normal_a[0] * resultant_x) + (normal_a[1] * resultant_y)
+    dot_b = (normal_b[0] * resultant_x) + (normal_b[1] * resultant_y)
+    thrust_ux, thrust_uy = normal_a if dot_a >= dot_b else normal_b
+
+    return cut_ux, cut_uy, thrust_ux, thrust_uy
+
+
 def thrust_block_for_upturn_bend_local(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     radius_px: float,
     diameter_px: float,
     angle_deg: float,
     block_width_px: float,
     block_height_px: float,
+    cut_midpoint: tuple[float, float] | None = None,
+    cut_angle_deg: float | None = None,
 ) -> tuple[float, float, float, float, float, float]:
     """Draw an angle-dependent support block under an upturn bend.
 
     The bend midpoint on the outside wall is used as the thrust contact location.
-    A single straight diagonal cut is used on the top-left corner, aligned
-    with the bend angle, so the resultant thrust has a clear flush support face.
+    A single straight diagonal cut is used on the top-left corner.
     """
 
     theta = math.radians(angle_deg)
@@ -804,50 +1533,68 @@ def thrust_block_for_upturn_bend_local(
     contact_x = mid_x + ux * (diameter_px / 2)
     contact_y = mid_y + uy * (diameter_px / 2)
 
-    # Resultant thrust direction from inlet and outlet tangents.
-    thrust_x = 1 - math.cos(theta)
-    thrust_y = math.sin(theta)
-    thrust_len = math.hypot(thrust_x, thrust_y)
-    if thrust_len == 0:
-        return (
-            contact_x,
-            contact_y,
-            contact_x,
-            contact_x + block_width_px,
-            contact_y,
-            contact_y + block_height_px,
-        )
+    # `angle_deg` controls the template block arrangement, while `cut_angle_deg`
+    # can override the diagonal-cut orientation to match the actual bend.
+    cut_angle = cut_angle_deg if cut_angle_deg is not None else angle_deg
 
-    thrust_ux = thrust_x / thrust_len
-    thrust_uy = thrust_y / thrust_len
+    # Diagonal cut orientation from theta/2.
+    cut_ux, cut_uy, _, _ = _upturn_cut_and_thrust_unit_vectors(cut_angle)
 
-    # Diagonal cut must be perpendicular to thrust so T acts normal to the face.
-    cut_ux = -thrust_uy
-    cut_uy = thrust_ux
+    # Allow the diagonal-cut midpoint to be anchored to an external target
+    # (e.g. actual bend contact for the current bend angle).
+    diagonal_mid_x = contact_x if cut_midpoint is None else cut_midpoint[0]
+    diagonal_mid_y = contact_y if cut_midpoint is None else cut_midpoint[1]
 
-    # Force block top to match inlet pipe crown in local coordinates.
-    top = -diameter_px / 2
+    # Build the diagonal so the chosen anchor lies on the face where T acts.
+    # Keep the top edge anchored and let height changes extend the block bottom.
+    min_cut_depth_px = max(12.0, diameter_px * 0.8)
 
-    # Put the top diagonal point where the thrust-normal line intersects the block top.
     if abs(cut_uy) < 1e-9:
-        top_cut_x = contact_x
+        # Fallback for near-horizontal cut directions.
+        top = diagonal_mid_y - (block_height_px / 2.0)
+        bottom = top + block_height_px
+        left = diagonal_mid_x - (block_width_px / 2.0)
+        right = left + block_width_px
+        top_cut_x = diagonal_mid_x
+        top_cut_y = top
+        left_cut_x = left
+        left_cut_y = diagonal_mid_y
     else:
-        top_param = (top - contact_y) / cut_uy
-        top_cut_x = contact_x + top_param * cut_ux
-    top_cut_y = top
+        # d is the vertical distance from the anchor to the top cut endpoint.
+        # Keep d independent of block height so the top stays fixed as height
+        # changes, and only constrain by available width.
+        max_d_from_width = (block_width_px / 2.0) * (abs(cut_uy) / abs(cut_ux)) if abs(cut_ux) >= 1e-9 else float("inf")
 
-    # Keep the second diagonal point on the same thrust-normal line at the left edge.
-    # This preserves one straight cut that stays perpendicular to T.
-    left_cut_y = top + max(12.0, min(block_height_px * 0.58, block_height_px - 12.0))
-    if abs(cut_uy) < 1e-9:
-        left_cut_x = top_cut_x - max(diameter_px * 0.5, 24.0)
-    else:
-        left_param = (left_cut_y - contact_y) / cut_uy
-        left_cut_x = contact_x + left_param * cut_ux
+        max_d = max_d_from_width
+        target_d = max(min_cut_depth_px / 2.0, 1.0)
+        d = max(1e-6, min(target_d, max_d)) if max_d > 1e-6 else 1e-6
 
-    left = left_cut_x
-    right = left + block_width_px
-    bottom = top + block_height_px
+        top = diagonal_mid_y - d
+        bottom = top + block_height_px
+
+        top_param = (top - diagonal_mid_y) / cut_uy
+        top_cut_x = diagonal_mid_x + top_param * cut_ux
+        top_cut_y = top
+
+        # Mirror the top-cut endpoint through the anchor to place the left-cut
+        # endpoint so, in normal geometry ranges, the cut midpoint is the
+        # thrust anchor itself.
+        left = (2.0 * diagonal_mid_x) - top_cut_x
+        right = left + block_width_px
+        left_cut_x = left
+        left_cut_y = (2.0 * diagonal_mid_y) - top
+
+        if left_cut_y > bottom:
+            # For unusually short blocks, keep the top fixed and clip the
+            # left-cut endpoint at the block base along the same cut line.
+            left_cut_y = bottom
+            left_param = (left_cut_y - diagonal_mid_y) / cut_uy
+            left_cut_x = diagonal_mid_x + left_param * cut_ux
+            left = left_cut_x
+            right = left + block_width_px
+
+        # Numerical guardrails.
+        left_cut_y = min(max(left_cut_y, top - 1e-9), bottom + 1e-9)
 
     # Simple block with one straight diagonal cut from left edge to top edge.
     p1 = (left, bottom)
@@ -856,18 +1603,14 @@ def thrust_block_for_upturn_bend_local(
     p4 = (top_cut_x, top_cut_y)
     p5 = (left_cut_x, left_cut_y)
 
-    points = " ".join(f"{x:.2f},{y:.2f}" for x, y in [p1, p2, p3, p4, p5])
-    canvas._lines.append(
-        f'<polygon points="{points}" '
-        f'fill="#d9d9d9" stroke="black" stroke-width="2"/>'
-    )
+    canvas.polygon([p1, p2, p3, p4, p5], fill="#d9d9d9", stroke="black", stroke_w=2)
 
     # Return thrust contact and block bounds for external annotation drawing.
-    return (contact_x, contact_y, left, right, top, bottom)
+    return (diagonal_mid_x, diagonal_mid_y, left, right, top, bottom)
 
 
 def thrust_arrow_for_bend_local(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     radius_px: float,
     angle_deg: float,
     offset_px: float = 0,
@@ -885,30 +1628,20 @@ def thrust_arrow_for_bend_local(
     resultant thrust direction (inlet tangent minus outlet tangent).
     """
 
-    theta = math.radians(angle_deg)
-
-    # Midpoint of bend centreline arc
-    mid_theta = theta / 2
-    mid_x = radius_px * math.sin(mid_theta)
-    mid_y = radius_px * (1 - math.cos(mid_theta))
-
-    # Resultant thrust vector from inlet and outlet tangents
-    thrust_x = 1 - math.cos(theta)
-    thrust_y = 0 - math.sin(theta)
-
-    thrust_len = math.hypot(thrust_x, thrust_y)
-    if thrust_len == 0:
+    geometry = BendGeometry.from_params(radius_px=radius_px, angle_deg=angle_deg)
+    thrust = geometry.normalized_resultant_thrust_vector
+    if thrust.x == 0 and thrust.y == 0:
         return
 
-    ux = thrust_x / thrust_len
-    uy = thrust_y / thrust_len
+    ux = thrust.x
+    uy = thrust.y
 
     # Perpendicular vector for arrow head and optional label offset
     vx = -uy
     vy = ux
 
-    start_x = mid_x + ux * offset_px
-    start_y = mid_y + uy * offset_px
+    start_x = geometry.arc_midpoint.x + ux * offset_px
+    start_y = geometry.arc_midpoint.y + uy * offset_px
     end_x = start_x + ux * length_px
     end_y = start_y + uy * length_px
 
@@ -944,12 +1677,12 @@ def thrust_arrow_for_bend_local(
         )
 
 def taper_local(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     length: float,
     od1: float,
     od2: float,
     wall: float = 2.0,
-) -> list[Port]:
+) -> list[PortType]:
     """
     Draw a taper (reducer) using OD only.
     
@@ -1030,12 +1763,12 @@ def taper_local(
 
 
 def flange_local(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     diameter_px: float,
     projection_px: float = 40,
     thickness_px: float = 15,
     flange_width_ratio: float = 1.15,
-) -> list[Port]:
+) -> list[PortType]:
     """
     Draw a flange connection in LOCAL coordinates.
 
@@ -1062,21 +1795,26 @@ def flange_local(
     half_p = projection_px / 2
 
     # Flange body (rectangular projection, wider than pipe)
-    canvas._lines.append(
-        f'<rect x="{-half_p:.2f}" y="{-flange_half_d:.2f}" '
-        f'width="{projection_px:.2f}" height="{diameter_px * flange_width_ratio:.2f}" '
-        f'fill="{canvas.pipe_fill}" '
-        f'stroke="{canvas.pipe_stroke}" '
-        f'stroke-width="2"/>'
+    canvas.rect(
+        x=-half_p,
+        y=-flange_half_d,
+        w=projection_px,
+        h=diameter_px * flange_width_ratio,
+        fill=canvas.pipe_fill,
+        stroke=canvas.pipe_stroke,
+        stroke_w=2,
     )
 
     # Centreline
-    canvas._lines.append(
-        f'<line x1="{-half_p:.2f}" y1="0" x2="{half_p:.2f}" y2="0" '
-        f'stroke="#999999" '
-        f'stroke-width="1" '
-        f'stroke-dasharray="6,6" '
-        f'stroke-opacity="0.5"/>'
+    canvas.line(
+        -half_p,
+        0,
+        half_p,
+        0,
+        stroke="#999999",
+        stroke_w=1,
+        dasharray="6,6",
+        stroke_opacity=0.5,
     )
 
     return [
@@ -1086,7 +1824,7 @@ def flange_local(
 
 
 def thrust_block_for_bend_local(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     radius_px: float,
     diameter_px: float,
     angle_deg: float,
@@ -1100,42 +1838,21 @@ def thrust_block_for_bend_local(
     The block is placed on the resultant thrust direction of the bend.
     """
 
-    theta = math.radians(angle_deg)
-
-    # Midpoint of the bend centreline
-    mid_theta = theta / 2
-
-    mid_x = radius_px * math.sin(mid_theta)
-    mid_y = radius_px * (1 - math.cos(mid_theta))
-
-    # Inlet tangent
-    in_tx = 1
-    in_ty = 0
-
-    # Outlet tangent
-    out_tx = math.cos(theta)
-    out_ty = math.sin(theta)
-
-    # Resultant thrust direction
-    thrust_x = in_tx - out_tx
-    thrust_y = in_ty - out_ty
-
-    # Normalise thrust direction
-    thrust_len = math.hypot(thrust_x, thrust_y)
-
-    if thrust_len == 0:
+    geometry = BendGeometry.from_params(radius_px=radius_px, angle_deg=angle_deg)
+    thrust = geometry.normalized_resultant_thrust_vector
+    if thrust.x == 0 and thrust.y == 0:
         return
 
-    ux = thrust_x / thrust_len
-    uy = thrust_y / thrust_len
+    ux = thrust.x
+    uy = thrust.y
 
     # Perpendicular direction to thrust
     vx = -uy
     vy = ux
 
     # Position block outside the pipe body
-    centre_x = mid_x + ux * (diameter_px / 2 + block_depth_px / 2 + offset_px)
-    centre_y = mid_y + uy * (diameter_px / 2 + block_depth_px / 2 + offset_px)
+    centre_x = geometry.arc_midpoint.x + ux * (diameter_px / 2 + block_depth_px / 2 + offset_px)
+    centre_y = geometry.arc_midpoint.y + uy * (diameter_px / 2 + block_depth_px / 2 + offset_px)
 
     half_w = block_width_px / 2
     half_d = block_depth_px / 2
@@ -1170,7 +1887,7 @@ def thrust_block_for_bend_local(
 
 
 def thrust_block_restraint_for_bend_local(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     radius_px: float,
     diameter_px: float,
     angle_deg: float,
@@ -1199,42 +1916,42 @@ def thrust_block_restraint_for_bend_local(
         offset_px=offset_px,
     )
 
-    theta = math.radians(angle_deg)
-    mid_theta = theta / 2
-
-    mid_x = radius_px * math.sin(mid_theta)
-    mid_y = radius_px * (1 - math.cos(mid_theta))
-
-    thrust_x = 1 - math.cos(theta)
-    thrust_y = -math.sin(theta)
-    thrust_len = math.hypot(thrust_x, thrust_y)
-    if thrust_len == 0:
+    geometry = BendGeometry.from_params(radius_px=radius_px, angle_deg=angle_deg)
+    thrust = geometry.normalized_resultant_thrust_vector
+    if thrust.x == 0 and thrust.y == 0:
         return
 
-    ux = thrust_x / thrust_len
-    uy = thrust_y / thrust_len
+    ux = thrust.x
+    uy = thrust.y
     vx = -uy
     vy = ux
 
     # Show transfer from bend outside wall midpoint into the restraint block.
-    force_start_x = mid_x + ux * (diameter_px / 2)
-    force_start_y = mid_y + uy * (diameter_px / 2)
+    force_start_x = geometry.arc_midpoint.x + ux * (diameter_px / 2)
+    force_start_y = geometry.arc_midpoint.y + uy * (diameter_px / 2)
     force_end_x = force_start_x + ux * (block_depth_px + offset_px)
     force_end_y = force_start_y + uy * (block_depth_px + offset_px)
 
-    canvas._lines.append(
-        f'<line x1="{force_start_x:.2f}" y1="{force_start_y:.2f}" '
-        f'x2="{force_end_x:.2f}" y2="{force_end_y:.2f}" '
-        f'stroke="#666666" stroke-width="1.5" stroke-dasharray="5,4"/>'
+    canvas.line(
+        force_start_x,
+        force_start_y,
+        force_end_x,
+        force_end_y,
+        stroke="#666666",
+        stroke_w=1.5,
+        dasharray="5,4",
     )
 
     if label:
         label_x = force_end_x + vx * 12
         label_y = force_end_y + vy * 12
-        canvas._lines.append(
-            f'<text x="{label_x:.2f}" y="{label_y:.2f}" '
-            f'fill="#333333" font-size="12" '
-            f'font-family="Arial, sans-serif">{label}</text>'
+        canvas.text(
+            label_x,
+            label_y,
+            label,
+            fill="#333333",
+            font_size=12,
+            font_family="Arial, sans-serif",
         )
 
 
@@ -1245,7 +1962,7 @@ def create_canvas(
     canvas_h: int,
     margin_x: int = 110,
     margin_y: int = 90,
-) -> dict[str, float | int]:
+) -> CanvasLayoutType:
     """Build a reusable canvas/scale context for any fitting SVG.
 
     Args:
@@ -1265,8 +1982,25 @@ def create_canvas(
           - 'canvas_h' : int   — canvas height (passed through for SVG header)
     """
     # Usable drawing area after subtracting margins on both sides
+    if total_len <= 0:
+        raise ValueError("total_len must be positive")
+    if max_height <= 0:
+        raise ValueError("max_height must be positive")
+    if canvas_w <= 0:
+        raise ValueError("canvas_w must be positive")
+    if canvas_h <= 0:
+        raise ValueError("canvas_h must be positive")
+    if margin_x < 0:
+        raise ValueError("margin_x must be non-negative")
+    if margin_y < 0:
+        raise ValueError("margin_y must be non-negative")
+
     draw_w = canvas_w - 2 * margin_x  # Available horizontal space for the pipe geometry
     draw_h = canvas_h - 2 * margin_y  # Available vertical space for the pipe geometry
+    if draw_w <= 0:
+        raise ValueError("canvas_w must exceed horizontal margins")
+    if draw_h <= 0:
+        raise ValueError("canvas_h must exceed vertical margins")
 
     # Scale factor: converts mm → SVG pixels.
     # min() picks the tighter constraint so the drawing never overflows in either direction.
@@ -1275,13 +2009,13 @@ def create_canvas(
     cx = canvas_w / 2  # Horizontal centre of the canvas in pixels
     cy = canvas_h / 2 - 20  # Vertical centre, shifted up 20px to leave room for the dim line
 
-    return {
-        "scale": scale,
-        "cx": cx,
-        "cy": cy,
-        "canvas_w": canvas_w,
-        "canvas_h": canvas_h,
-    }
+    return CanvasLayout(
+        scale=scale,
+        cx=cx,
+        cy=cy,
+        canvas_w=canvas_w,
+        canvas_h=canvas_h,
+    )
 
 
 def vertical_upturn_bend_section(
@@ -1289,431 +2023,30 @@ def vertical_upturn_bend_section(
     vertical_bend: "VerticalUpturnBend | SimpleNamespace",
     z0_m: float = 1.0,
     z_gw_m: float = 0.8,
-) -> None:
+) -> list[SVGDrawing]:
 
-    # =========================
-    # CREATE CANVAS
-    # =========================
-    outside_diameter_mm = vertical_bend.outside_diameter * 1000
-    bend_angle_deg = vertical_bend.angle
-    bend_radius_mm = (
-        vertical_bend.radius * 1000
-        if vertical_bend.radius > 0
-        else 1.5 * outside_diameter_mm
+    block_input = ThrustBlockInput(
+        height=thrust_block.height,
+        width=thrust_block.width,
+        length=thrust_block.length,
+        depth=thrust_block.depth,
     )
-
-    block_height_mm = thrust_block.height * 1000
-    block_length_mm = thrust_block.length * 1000
-
-    # Fit the geometry to canvas with sensible dynamic bounds.
-    total_len_mm = max(4000.0, 2 * 1000 + 2 * 150 + bend_radius_mm)
-    max_height_mm = max(3000.0, block_height_mm * 1.8)
-
-    ctx = create_canvas(total_len_mm, max_height_mm, 600, 400)
-
-    canvas = SVGCanvas(
-        ctx["scale"],
-        int(ctx["canvas_w"]),
-        int(ctx["canvas_h"]),
+    bend_input = BendInput(
+        outside_diameter=vertical_bend.outside_diameter,
+        angle=vertical_bend.angle,
+        radius=vertical_bend.radius,
     )
-
-    cx = ctx["cx"]
-    cy = ctx["cy"]
-
-    # =========================
-    # BEND (CENTRE FEATURE)
-    # =========================
-    bend_diameter = canvas.mm_to_px(outside_diameter_mm)
-    bend_radius = canvas.mm_to_px(bend_radius_mm)
-
-    bend_ports = canvas.place_fitting_local(
-        canvas.make_port(cx, cy, 1, 0),
-        lambda: bend_local(
-            canvas,
-            radius_px=bend_radius,
-            diameter_px=bend_diameter,
-            angle_deg=bend_angle_deg,
-        )
-    )
-
-    bend_inlet = bend_ports[0]
-    bend_outlet = bend_ports[1]
-
-    # =========================
-    # SOCKET ON INLET SIDE
-    # =========================
-    socket_od = canvas.mm_to_px(1.15 * outside_diameter_mm)
-
-    socket_ports = canvas.place_fitting_local(
-        bend_inlet,
-        lambda: socket_pipe_local(
-            canvas,
-            length=canvas.mm_to_px(150),
-            diameter=bend_diameter,
-            socket_length=canvas.mm_to_px(150),
-            socket_od=socket_od,
-        ),
-    )
-
-    socket_inlet = socket_ports[0]
-
-    # =========================
-    # INLET PIPE
-    # =========================
-    inlet_pipe_port = canvas.make_port(
-        socket_inlet["center"][0],
-        socket_inlet["center"][1],
-        socket_inlet["tangent"][0],
-        socket_inlet["tangent"][1],
-    )
-
-    inlet_pipe_end_port = canvas.pipe_from_port(
-        inlet_pipe_port,
-        Px(canvas.mm_to_px(1000)),
-        Px(bend_diameter),
-    )
-
-    # =========================
-    # Outlet Socket
-    # =========================
-
-    socket_length = canvas.mm_to_px(140)
-    socket_od = canvas.mm_to_px(1.15 * outside_diameter_mm)
-
-    socket_ports = canvas.place_fitting_local(
-        bend_outlet,
-        lambda: socket_pipe_local(
-            canvas,
-            length=socket_length,
-            diameter=bend_diameter,
-            socket_length=canvas.mm_to_px(150),
-            socket_od=socket_od,
-            is_inlet=False,
-        ),
-    )
-
-    socket_outlet = socket_ports[1]
-
-    # =========================
-    # OUTLET PIPE
-    # =========================
-    canvas.pipe_from_port(
-        socket_outlet,
-        Px(canvas.mm_to_px(1000)),
-        Px(bend_diameter),
-    )
-
-    # =========================
-    # THRUST BLOCK (angle dependent, supports bend midpoint)
-    # =========================
-    canvas.begin_group(f"translate({cx},{cy}) rotate(0)")
-    contact_x, contact_y, block_left, block_right, block_top, block_bottom = thrust_block_for_upturn_bend_local(
-        canvas,
-        radius_px=bend_radius,
-        diameter_px=bend_diameter,
-        angle_deg=bend_angle_deg,
-        block_width_px=canvas.mm_to_px(block_length_mm),
-        block_height_px=canvas.mm_to_px(block_height_mm),
-    )
-
-    # THRUST COMPONENT ARROWS (Tx, Tz and resultant T)
-    theta = math.radians(bend_angle_deg)
-    t_direction_x = 1 - math.cos(theta)
-    t_direction_y = math.sin(theta)
-
-    thrust_component_arrows_for_bend_local(
-        canvas,
-        origin_x=contact_x,
-        origin_y=contact_y,
-        tx_len_px=canvas.mm_to_px(620),
-        tz_len_px=canvas.mm_to_px(500),
-        t_len_px=canvas.mm_to_px(670),
-        t_direction_x=t_direction_x,
-        t_direction_y=t_direction_y,
-    )
-    canvas.end_group()
-
-    # Convert block bounds from local bend coordinates to global canvas coordinates.
-    block_left_g = block_left + cx
-    block_right_g = block_right + cx
-    block_top_g = block_top + cy
-    block_bottom_g = block_bottom + cy
-
-    # =========================
-    # GROUND LEVEL (REFERENCE Z0 FROM PIPE CROWN)
-    # =========================
-    inlet_top_wall_center_x = (
-        inlet_pipe_port["center"][0] + inlet_pipe_end_port["center"][0]
-    ) / 2
-    crown_y = inlet_pipe_port["center"][1] - (bend_diameter / 2)
-    z0_px = canvas.mm_to_px(z0_m * 1000)
-    ground_y = max(20.0, crown_y - z0_px)
-
-    ground_x1 = 10.0
-    ground_x2 = float(ctx["canvas_w"]) - 10.0
-    canvas._lines.append(
-        f'<line x1="{ground_x1:.2f}" y1="{ground_y:.2f}" '
-        f'x2="{ground_x2:.2f}" y2="{ground_y:.2f}" '
-        f'stroke="black" stroke-width="2"/>'
-    )
-
-    # Groundwater level placeholder (depth below ground level).
-    z_gw_px = canvas.mm_to_px(z_gw_m * 1000)
-    gw_y = min(float(ctx["canvas_h"]) - 10.0, ground_y + z_gw_px)
-    canvas._lines.append(
-        f'<line x1="{ground_x1:.2f}" y1="{gw_y:.2f}" '
-        f'x2="{ground_x2:.2f}" y2="{gw_y:.2f}" '
-        f'stroke="#42a5f5" stroke-width="1" stroke-dasharray="8,6"/>'
-    )
-
-    label_x = float(ctx["canvas_w"]) * 0.52
-    label_y = ground_y - 16
-    triangle_half_w = 6.0
-    triangle_h = 10.0
-    tri_top_y = ground_y - triangle_h
-
-    canvas._lines.append(
-        f'<text x="{label_x:.2f}" y="{label_y:.2f}" '
-        f'fill="black" font-size="12" '
-        f'font-family="Arial, sans-serif" '
-        f'text-anchor="middle">Ground level</text>'
-    )
-
-    # Downward triangle marker beneath the label.
-    canvas._lines.append(
-        f'<polygon points="'
-        f'{label_x - triangle_half_w:.2f},{tri_top_y:.2f} '
-        f'{label_x + triangle_half_w:.2f},{tri_top_y:.2f} '
-        f'{label_x:.2f},{tri_top_y + triangle_h:.2f}'
-        f'" fill="none" stroke="black" stroke-width="1.5"/>'
-    )
-
-    # Vertical Z0 dimension arrow between inlet crown and ground level.
-    z0_arrow_x = inlet_top_wall_center_x
-    z0_top_y = min(ground_y, crown_y)
-    z0_bottom_y = max(ground_y, crown_y)
-    z0_head_len = 8.0
-    z0_head_half_w = 4.0
-
-    shaft_top_y = z0_top_y + z0_head_len
-    shaft_bottom_y = z0_bottom_y - z0_head_len
-    if shaft_bottom_y > shaft_top_y:
-        canvas._lines.append(
-            f'<line x1="{z0_arrow_x:.2f}" y1="{shaft_top_y:.2f}" '
-            f'x2="{z0_arrow_x:.2f}" y2="{shaft_bottom_y:.2f}" '
-            f'stroke="black" stroke-width="1.6"/>'
-        )
-
-    canvas._lines.append(
-        f'<polygon points="'
-        f'{z0_arrow_x - z0_head_half_w:.2f},{z0_top_y + z0_head_len:.2f} '
-        f'{z0_arrow_x + z0_head_half_w:.2f},{z0_top_y + z0_head_len:.2f} '
-        f'{z0_arrow_x:.2f},{z0_top_y:.2f}'
-        f'" fill="black" stroke="black" stroke-width="1"/>'
-    )
-    canvas._lines.append(
-        f'<polygon points="'
-        f'{z0_arrow_x - z0_head_half_w:.2f},{z0_bottom_y - z0_head_len:.2f} '
-        f'{z0_arrow_x + z0_head_half_w:.2f},{z0_bottom_y - z0_head_len:.2f} '
-        f'{z0_arrow_x:.2f},{z0_bottom_y:.2f}'
-        f'" fill="black" stroke="black" stroke-width="1"/>'
-    )
-
-    z0_text_x = z0_arrow_x + 10.0
-    z0_text_y = (z0_top_y + z0_bottom_y) / 2
-    canvas._lines.append(
-        f'<text x="{z0_text_x:.2f}" y="{z0_text_y:.2f}" '
-        f'fill="black" font-size="13" '
-        f'font-family="Arial, sans-serif" dominant-baseline="middle">'
-        f'Z_0 = {z0_m:.1f}m</text>'
-    )
-
-    # Vertical Z_GW dimension arrow between ground level and groundwater level.
-    z_gw_arrow_x = ground_x1 + 22.0
-    z_gw_top_y = min(ground_y, gw_y)
-    z_gw_bottom_y = max(ground_y, gw_y)
-    z_gw_head_len = 8.0
-    z_gw_head_half_w = 4.0
-
-    z_gw_shaft_top_y = z_gw_top_y + z_gw_head_len
-    z_gw_shaft_bottom_y = z_gw_bottom_y - z_gw_head_len
-    if z_gw_shaft_bottom_y > z_gw_shaft_top_y:
-        canvas._lines.append(
-            f'<line x1="{z_gw_arrow_x:.2f}" y1="{z_gw_shaft_top_y:.2f}" '
-            f'x2="{z_gw_arrow_x:.2f}" y2="{z_gw_shaft_bottom_y:.2f}" '
-            f'stroke="#42a5f5" stroke-width="1.6"/>'
-        )
-
-    canvas._lines.append(
-        f'<polygon points="'
-        f'{z_gw_arrow_x - z_gw_head_half_w:.2f},{z_gw_top_y + z_gw_head_len:.2f} '
-        f'{z_gw_arrow_x + z_gw_head_half_w:.2f},{z_gw_top_y + z_gw_head_len:.2f} '
-        f'{z_gw_arrow_x:.2f},{z_gw_top_y:.2f}'
-        f'" fill="#42a5f5" stroke="#42a5f5" stroke-width="1"/>'
-    )
-    canvas._lines.append(
-        f'<polygon points="'
-        f'{z_gw_arrow_x - z_gw_head_half_w:.2f},{z_gw_bottom_y - z_gw_head_len:.2f} '
-        f'{z_gw_arrow_x + z_gw_head_half_w:.2f},{z_gw_bottom_y - z_gw_head_len:.2f} '
-        f'{z_gw_arrow_x:.2f},{z_gw_bottom_y:.2f}'
-        f'" fill="#42a5f5" stroke="#42a5f5" stroke-width="1"/>'
-    )
-
-    z_gw_text_x = z_gw_arrow_x + 10.0
-    z_gw_text_y = (z_gw_top_y + z_gw_bottom_y) / 2
-    canvas._lines.append(
-        f'<text x="{z_gw_text_x:.2f}" y="{z_gw_text_y:.2f}" '
-        f'fill="#42a5f5" font-size="13" '
-        f'font-family="Arial, sans-serif" dominant-baseline="middle" '
-        f'text-anchor="start">'
-        f'Z_GW = {z_gw_m:.1f}m</text>'
-    )
-
-    # =========================
-    # BLOCK DIMENSIONS (Z_b, H, L)
-    # =========================
-    dim_color = "black"
-    dim_dash = "8,6"
-    head_len = 8.0
-    head_half_w = 4.0
-
-    # Horizontal dashed references at block top and bottom.
-    h_arrow_x = block_right_g + 28.0
-    z_b_arrow_x = h_arrow_x + 86.0
-    canvas._lines.append(
-        f'<line x1="{block_right_g:.2f}" y1="{block_top_g:.2f}" '
-        f'x2="{h_arrow_x:.2f}" y2="{block_top_g:.2f}" '
-        f'stroke="{dim_color}" stroke-width="1.5" stroke-dasharray="{dim_dash}"/>'
-    )
-    canvas._lines.append(
-        f'<line x1="{block_right_g:.2f}" y1="{block_bottom_g:.2f}" '
-        f'x2="{z_b_arrow_x:.2f}" y2="{block_bottom_g:.2f}" '
-        f'stroke="{dim_color}" stroke-width="1.5" stroke-dasharray="{dim_dash}"/>'
-    )
-
-    # H (block height): vertical two-sided arrow at right of block.
-    h_top = block_top_g
-    h_bottom = block_bottom_g
-    h_shaft_top = h_top + head_len
-    h_shaft_bottom = h_bottom - head_len
-    if h_shaft_bottom > h_shaft_top:
-        canvas._lines.append(
-            f'<line x1="{h_arrow_x:.2f}" y1="{h_shaft_top:.2f}" '
-            f'x2="{h_arrow_x:.2f}" y2="{h_shaft_bottom:.2f}" '
-            f'stroke="{dim_color}" stroke-width="1.8"/>'
-        )
-
-    canvas._lines.append(
-        f'<polygon points="'
-        f'{h_arrow_x - head_half_w:.2f},{h_top + head_len:.2f} '
-        f'{h_arrow_x + head_half_w:.2f},{h_top + head_len:.2f} '
-        f'{h_arrow_x:.2f},{h_top:.2f}'
-        f'" fill="{dim_color}" stroke="{dim_color}" stroke-width="1"/>'
-    )
-    canvas._lines.append(
-        f'<polygon points="'
-        f'{h_arrow_x - head_half_w:.2f},{h_bottom - head_len:.2f} '
-        f'{h_arrow_x + head_half_w:.2f},{h_bottom - head_len:.2f} '
-        f'{h_arrow_x:.2f},{h_bottom:.2f}'
-        f'" fill="{dim_color}" stroke="{dim_color}" stroke-width="1"/>'
-    )
-
-    canvas._lines.append(
-        f'<text x="{(h_arrow_x + 10.0):.2f}" y="{((h_top + h_bottom) / 2):.2f}" '
-        f'fill="{dim_color}" font-size="13" '
-        f'font-family="Arial, sans-serif" dominant-baseline="middle">'
-        f'H = {thrust_block.height:.1f}m</text>'
-    )
-
-    # Z_b (depth from ground to block base): vertical two-sided arrow farther right.
-    z_b_top = ground_y
-    z_b_bottom = block_bottom_g
-    z_b_shaft_top = z_b_top + head_len
-    z_b_shaft_bottom = z_b_bottom - head_len
-    if z_b_shaft_bottom > z_b_shaft_top:
-        canvas._lines.append(
-            f'<line x1="{z_b_arrow_x:.2f}" y1="{z_b_shaft_top:.2f}" '
-            f'x2="{z_b_arrow_x:.2f}" y2="{z_b_shaft_bottom:.2f}" '
-            f'stroke="{dim_color}" stroke-width="1.8"/>'
-        )
-
-    canvas._lines.append(
-        f'<polygon points="'
-        f'{z_b_arrow_x - head_half_w:.2f},{z_b_top + head_len:.2f} '
-        f'{z_b_arrow_x + head_half_w:.2f},{z_b_top + head_len:.2f} '
-        f'{z_b_arrow_x:.2f},{z_b_top:.2f}'
-        f'" fill="{dim_color}" stroke="{dim_color}" stroke-width="1"/>'
-    )
-    canvas._lines.append(
-        f'<polygon points="'
-        f'{z_b_arrow_x - head_half_w:.2f},{z_b_bottom - head_len:.2f} '
-        f'{z_b_arrow_x + head_half_w:.2f},{z_b_bottom - head_len:.2f} '
-        f'{z_b_arrow_x:.2f},{z_b_bottom:.2f}'
-        f'" fill="{dim_color}" stroke="{dim_color}" stroke-width="1"/>'
-    )
-
-    z_b_m = (z_b_bottom - z_b_top) / (canvas.scale * 1000)
-    canvas._lines.append(
-        f'<text x="{(z_b_arrow_x + 10.0):.2f}" y="{((z_b_top + z_b_bottom) / 2):.2f}" '
-        f'fill="{dim_color}" font-size="13" '
-        f'font-family="Arial, sans-serif" dominant-baseline="middle">'
-        f'Z_b = {z_b_m:.1f}m</text>'
-    )
-
-    # L (block length): horizontal two-sided arrow under the block.
-    l_arrow_y = block_bottom_g + 58.0
-    l_head_len = 10.0
-    l_head_half_h = 4.5
-    l_shaft_left = block_left_g + l_head_len
-    l_shaft_right = block_right_g - l_head_len
-
-    canvas._lines.append(
-        f'<line x1="{block_left_g:.2f}" y1="{block_bottom_g:.2f}" '
-        f'x2="{block_left_g:.2f}" y2="{l_arrow_y:.2f}" '
-        f'stroke="{dim_color}" stroke-width="1.5" stroke-dasharray="{dim_dash}"/>'
-    )
-    canvas._lines.append(
-        f'<line x1="{block_right_g:.2f}" y1="{block_bottom_g:.2f}" '
-        f'x2="{block_right_g:.2f}" y2="{l_arrow_y:.2f}" '
-        f'stroke="{dim_color}" stroke-width="1.5" stroke-dasharray="{dim_dash}"/>'
-    )
-
-    if l_shaft_right > l_shaft_left:
-        canvas._lines.append(
-            f'<line x1="{l_shaft_left:.2f}" y1="{l_arrow_y:.2f}" '
-            f'x2="{l_shaft_right:.2f}" y2="{l_arrow_y:.2f}" '
-            f'stroke="{dim_color}" stroke-width="1.8"/>'
-        )
-
-    canvas._lines.append(
-        f'<polygon points="'
-        f'{block_left_g + l_head_len:.2f},{l_arrow_y - l_head_half_h:.2f} '
-        f'{block_left_g + l_head_len:.2f},{l_arrow_y + l_head_half_h:.2f} '
-        f'{block_left_g:.2f},{l_arrow_y:.2f}'
-        f'" fill="{dim_color}" stroke="{dim_color}" stroke-width="1"/>'
-    )
-    canvas._lines.append(
-        f'<polygon points="'
-        f'{block_right_g - l_head_len:.2f},{l_arrow_y - l_head_half_h:.2f} '
-        f'{block_right_g - l_head_len:.2f},{l_arrow_y + l_head_half_h:.2f} '
-        f'{block_right_g:.2f},{l_arrow_y:.2f}'
-        f'" fill="{dim_color}" stroke="{dim_color}" stroke-width="1"/>'
-    )
-
-    canvas._lines.append(
-        f'<text x="{((block_left_g + block_right_g) / 2):.2f}" y="{(l_arrow_y + 14.0):.2f}" '
-        f'fill="{dim_color}" font-size="13" '
-        f'font-family="Arial, sans-serif" text-anchor="middle">'
-        f'L = {thrust_block.length:.1f}m</text>'
-    )
-
-    # =========================
-    # SAVE SVG
-    # =========================
-    canvas.save("./test_pipe.svg")
+    return VerticalBendSVGWriter(
+        thrust_block=block_input,
+        bend=bend_input,
+        canvas_w=600,
+        canvas_h=400,
+        depth_crown=z0_m,
+        gw_level=z_gw_m,
+    ).drawings()
 
 def thrust_arrow_for_taper_axial(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     start_x: float,
     start_y: float,
     direction_x: float,
@@ -1796,7 +2129,7 @@ def thrust_arrow_for_taper_axial(
 
 
 def thrust_block_restraint_for_taper_axial(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     contact_x: float,
     contact_y: float,
     direction_x: float,
@@ -1881,7 +2214,7 @@ def thrust_block_restraint_for_taper_axial(
 
 
 def draw_vertical_dim(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     x: float,
     y_top: float,
     y_bottom: float,
@@ -1924,12 +2257,13 @@ def draw_vertical_dim(
 
 
 def draw_horizontal_dim(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     x_left: float,
     x_right: float,
     y: float,
     label: str,
     color: str = "black",
+    label_padding_px: float = 16.0,
 ) -> None:
     """Draw a horizontal two-headed dimension with a centered label."""
     head_len = 10.0
@@ -1954,7 +2288,7 @@ def draw_horizontal_dim(
 
     canvas.text(
         (x_left + x_right) / 2,
-        y + 16,
+        y + label_padding_px,
         label,
         fill=color,
         font_size=13,
@@ -1964,11 +2298,11 @@ def draw_horizontal_dim(
 
 
 def draw_plan_bellmouth(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     length_px: float,
     connected_diameter_px: float,
     opening_scale: float = 1.6,
-) -> list[Port]:
+) -> list[PortType]:
     """Draw a local bellmouth with connection at x=0 and opening at x=length."""
     pipe_half_h = connected_diameter_px / 2
     opening_half_h = pipe_half_h * opening_scale
@@ -1987,12 +2321,12 @@ def draw_plan_bellmouth(
 
 
 def draw_plan_double_flange(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     diameter_px: float,
     flange_t_px: float,
     flange_gap_px: float,
     height_factor: float,
-) -> list[Port]:
+) -> list[PortType]:
     """Draw a local double-flange pair and return inlet/outlet ports."""
     pair_w = 2 * flange_t_px + flange_gap_px
     flange_h = diameter_px * height_factor
@@ -2010,11 +2344,11 @@ def draw_plan_double_flange(
 
 
 def draw_plan_single_socket(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     diameter_px: float,
     socket_w_px: float,
     height_factor: float,
-) -> list[Port]:
+) -> list[PortType]:
     """Draw a local single socket collar and return inlet/outlet ports."""
     socket_h = diameter_px * height_factor
     canvas.rect(0, -socket_h / 2, socket_w_px, socket_h, fill="#efefef", stroke="black", stroke_w=1.8)
@@ -2026,10 +2360,10 @@ def draw_plan_single_socket(
 
 
 def draw_plan_pipe_segment(
-    canvas: SVGCanvas,
+    canvas: SVGCanvasType,
     length_px: float,
     diameter_px: float,
-) -> list[Port]:
+) -> list[PortType]:
     """Draw a local straight pipe segment and return inlet/outlet ports."""
     canvas.rect(0, -diameter_px / 2, length_px, diameter_px, fill="white", stroke="black", stroke_w=2)
 
@@ -2044,399 +2378,30 @@ def taper_thrust_section(
     taper_thrust: "TaperThrust | SimpleNamespace",
     z0_m: float = 1.0,
     z_gw_m: float = 0.8,
-) -> None:
-    """Draw taper thrust plan and section views using model inputs."""
-
-    # Same canvas size as bend-section drawing.
-    canvas_w = 600
-    canvas_h = 400
-
-    # Drawing scale for both taper drawings (px per metre).
-    m_to_px = 46.0
-
-    # Inputs from domain models.
-    length_m = thrust_block.length
-    block_width_m = thrust_block.width
-    block_height_m = thrust_block.height
-    pipe_od_large_m = taper_thrust.outside_diameter_large
-    pipe_od_small_m = taper_thrust.outside_diameter_small
-
-    # =========================
-    # PLAN DRAWING
-    # =========================
-    plan_canvas = SVGCanvas(scale=1.0, width=canvas_w, height=canvas_h)
-
-    plan_x1 = 20.0
-    plan_x2 = 580.0
-    plan_y1 = 20.0
-    plan_y2 = 350.0
-    plan_cx = (plan_x1 + plan_x2) / 2
-    plan_cy = (plan_y1 + plan_y2) / 2
-    plan_block_w = length_m * m_to_px
-    plan_block_h = block_width_m * m_to_px
-
-    plan_left = plan_cx - (plan_block_w / 2)
-    plan_right = plan_cx + (plan_block_w / 2)
-    plan_top = plan_cy - (plan_block_h / 2)
-    plan_bottom = plan_cy + (plan_block_h / 2)
-    # Keep W-dimension near right canvas edge with margin, but clear of the block.
-    w_dim_x = max(plan_right + 12.0, plan_x2 - 16.0)
-
-    plan_canvas.rect(plan_left, plan_top, plan_block_w, plan_block_h, fill="#d9d9d9", stroke="black", stroke_w=2)
-
-    def _draw_wavy_horizontal_line(x1: float, x2: float, y: float, amp: float = 2.2, wave_len: float = 28.0) -> None:
-        """Draw a hand-sketched style wavy horizontal line segment."""
-        n_segments = max(10, int((x2 - x1) / 8.0))
-        prev_x = x1
-        prev_y = y
-        for i in range(1, n_segments + 1):
-            t = i / n_segments
-            x = x1 + (x2 - x1) * t
-            dx = x - x1
-            # Blend multiple frequencies for a less uniform, sketch-like waviness.
-            wave_y = y + amp * (
-                0.65 * math.sin((2 * math.pi * dx / wave_len))
-                + 0.25 * math.sin((2 * math.pi * dx / (wave_len * 0.57)) + 1.1)
-                + 0.10 * math.sin((2 * math.pi * dx / (wave_len * 1.9)) + 2.3)
-            )
-            plan_canvas.line(prev_x, prev_y, x, wave_y, stroke="black", stroke_w=1.6)
-            prev_x = x
-            prev_y = wave_y
-
-    def _draw_hatch_cluster(x_start: float, y: float, count: int = 4, up: bool = True) -> None:
-        """Draw a small cluster of diagonal hatch strokes near a trench line."""
-        for i in range(count):
-            x1 = x_start + i * 8.0
-            y1 = y
-            x2 = x1 + 7.0
-            y2 = y1 - 7.0 if up else y1 + 7.0
-            plan_canvas.line(x1, y1, x2, y2, stroke="black", stroke_w=2.0)
-
-    # Trench/ground indication lines: top and bottom, left and right of block.
-    trench_top_y = plan_top + plan_block_h * 0.22
-    trench_bottom_y = plan_bottom - plan_block_h * 0.22
-    trench_right_x2 = max(plan_right + 20.0, w_dim_x - 36.0)
-    _draw_wavy_horizontal_line(plan_x1 + 8.0, plan_left, trench_top_y)
-    _draw_wavy_horizontal_line(plan_x1 + 8.0, plan_left, trench_bottom_y)
-    _draw_wavy_horizontal_line(plan_right, trench_right_x2, trench_top_y)
-    _draw_wavy_horizontal_line(plan_right, trench_right_x2, trench_bottom_y)
-
-    # Diagonal hatching similar to trench sketch notation.
-    _draw_hatch_cluster(plan_x1 + 18.0, trench_top_y, count=4, up=True)
-    _draw_hatch_cluster(plan_x1 + 14.0, trench_bottom_y, count=3, up=False)
-    _draw_hatch_cluster(plan_right + 42.0, trench_top_y, count=3, up=True)
-    _draw_hatch_cluster(plan_right + 38.0, trench_bottom_y, count=3, up=False)
-
-    # Use true diameters in plan so sizing matches Section A-A scale.
-    pipe_h_large = pipe_od_large_m * m_to_px
-    pipe_h_small = pipe_od_small_m * m_to_px
-
-    taper_len = 28.0
-    bell_len = 9.0
-    dn600_len = 100.0
-    outlet_pipe_len = 100.0
-    tail_pipe_len = 55.0
-    flange_t = 4.0
-    flange_gap = 0.0
-
-    taper_inlet_x = plan_cx - (taper_len / 2)
-    taper_inlet_port = plan_canvas.make_port(taper_inlet_x, plan_cy, 1, 0)
-    taper_outlet_port = plan_canvas.place_fitting_local(
-        taper_inlet_port,
-        lambda: taper_local(
-            plan_canvas,
-            taper_len,
-            pipe_h_large,
-            pipe_h_small,
-            wall=1.0,
-        ),
-    )[0]
-
-    downstream_port = plan_canvas.place_fitting_local(
-        taper_outlet_port,
-        lambda: draw_plan_double_flange(
-            plan_canvas,
-            diameter_px=pipe_h_small,
-            flange_t_px=flange_t,
-            flange_gap_px=flange_gap,
-            height_factor=1.35,
-        ),
-    )[1]
-    downstream_port = plan_canvas.place_fitting_local(
-        downstream_port,
-        lambda: draw_plan_pipe_segment(plan_canvas, outlet_pipe_len, pipe_h_small),
-    )[1]
-    downstream_port = plan_canvas.place_fitting_local(
-        downstream_port,
-        lambda: draw_plan_bellmouth(plan_canvas, bell_len, pipe_h_small, opening_scale=1.6),
-    )[1]
-    downstream_end_port = plan_canvas.place_fitting_local(
-        downstream_port,
-        lambda: draw_plan_pipe_segment(plan_canvas, tail_pipe_len, pipe_h_small),
-    )[1]
-
-    upstream_start = plan_canvas.make_port(taper_inlet_x, plan_cy, -1, 0)
-    upstream_port = plan_canvas.place_fitting_local(
-        upstream_start,
-        lambda: draw_plan_double_flange(
-            plan_canvas,
-            diameter_px=pipe_h_large,
-            flange_t_px=flange_t,
-            flange_gap_px=flange_gap,
-            height_factor=1.25,
-        ),
-    )[1]
-    upstream_port = plan_canvas.place_fitting_local(
-        upstream_port,
-        lambda: draw_plan_pipe_segment(plan_canvas, dn600_len, pipe_h_large),
-    )[1]
-    upstream_end_port = plan_canvas.place_fitting_local(
-        upstream_port,
-        lambda: draw_plan_bellmouth(plan_canvas, bell_len, pipe_h_large, opening_scale=1.6),
-    )[1]
-
-    socket_w = 12.0
-    socket_gap = 2.0
-    inlet_socket_x = plan_left - socket_gap - socket_w
-    inlet_socket_port = plan_canvas.make_port(inlet_socket_x, plan_cy, 1, 0)
-    plan_canvas.place_fitting_local(
-        inlet_socket_port,
-        lambda: draw_plan_single_socket(
-            plan_canvas,
-            diameter_px=pipe_h_large,
-            socket_w_px=socket_w,
-            height_factor=1.2,
-        ),
+) -> list[SVGDrawing]:
+    block_input = ThrustBlockInput(
+        height=thrust_block.height,
+        width=thrust_block.width,
+        length=thrust_block.length,
+        depth=thrust_block.depth,
     )
-
-    outlet_socket_x = plan_right + socket_gap
-    outlet_socket_port = plan_canvas.make_port(outlet_socket_x, plan_cy, 1, 0)
-    plan_canvas.place_fitting_local(
-        outlet_socket_port,
-        lambda: draw_plan_single_socket(
-            plan_canvas,
-            diameter_px=pipe_h_small,
-            socket_w_px=socket_w,
-            height_factor=1.25,
-        ),
+    taper_input = TaperInput(
+        outside_diameter_large=taper_thrust.outside_diameter_large,
+        outside_diameter_small=taper_thrust.outside_diameter_small,
     )
-
-    plan_canvas.line(
-        upstream_end_port["center"][0],
-        plan_cy,
-        downstream_end_port["center"][0],
-        plan_cy,
-        stroke="#999999",
-        stroke_w=1,
-        dasharray="6,6",
-        stroke_opacity=0.6,
-    )
-
-    draw_horizontal_dim(plan_canvas, plan_left, plan_right, plan_bottom + 36.0, f'L = {length_m:.1f} m')
-    draw_vertical_dim(
-        plan_canvas,
-        w_dim_x,
-        plan_top,
-        plan_bottom,
-        f'W = {block_width_m:.1f}m',
-        text_dx=-8.0,
-        text_anchor="end",
-    )
-
-    # Keep Plan label near the bottom canvas edge while respecting margin.
-    plan_label_y = canvas_h - 16.0
-    plan_canvas.text(
-        plan_cx,
-        plan_label_y,
-        "Plan",
-        fill="black",
-        font_size=13,
-        font_family="Arial, sans-serif",
-        text_anchor="middle",
-    )
-
-    # Single A-A section cut through the large side of the taper, just after the upstream flanges.
-    section_cut_x = taper_inlet_x + 2.0
-    section_top_y = plan_top - 20.0
-    section_bottom_y = plan_bottom + 20.0
-    plan_canvas.line(section_cut_x, section_top_y, section_cut_x, section_bottom_y, stroke="black", stroke_w=1.6)
-
-    # Top and bottom right-pointing arrows with A labels.
-    top_arrow_y = section_top_y
-    bottom_arrow_y = section_bottom_y
-    arrow_len = 52.0
-    head_len = 10.0
-    head_half_h = 5.0
-
-    # Top arrow shaft + head
-    top_shaft_end_x = section_cut_x + arrow_len - head_len
-    plan_canvas.line(section_cut_x, top_arrow_y, top_shaft_end_x, top_arrow_y, stroke="black", stroke_w=1.4)
-    plan_canvas.polygon(
-        [
-            (section_cut_x + arrow_len, top_arrow_y),
-            (top_shaft_end_x, top_arrow_y - head_half_h),
-            (top_shaft_end_x, top_arrow_y + head_half_h),
-        ],
-        fill="black",
-        stroke="black",
-        stroke_w=1,
-    )
-    plan_canvas.text(
-        section_cut_x + arrow_len + 8.0,
-        top_arrow_y,
-        "A",
-        fill="black",
-        font_size=12,
-        font_family="Arial, sans-serif",
-        dominant_baseline="middle",
-        text_anchor="start",
-    )
-
-    # Bottom arrow shaft + head
-    bottom_shaft_end_x = section_cut_x + arrow_len - head_len
-    plan_canvas.line(section_cut_x, bottom_arrow_y, bottom_shaft_end_x, bottom_arrow_y, stroke="black", stroke_w=1.4)
-    plan_canvas.polygon(
-        [
-            (section_cut_x + arrow_len, bottom_arrow_y),
-            (bottom_shaft_end_x, bottom_arrow_y - head_half_h),
-            (bottom_shaft_end_x, bottom_arrow_y + head_half_h),
-        ],
-        fill="black",
-        stroke="black",
-        stroke_w=1,
-    )
-    plan_canvas.text(
-        section_cut_x + arrow_len + 8.0,
-        bottom_arrow_y,
-        "A",
-        fill="black",
-        font_size=12,
-        font_family="Arial, sans-serif",
-        dominant_baseline="middle",
-        text_anchor="start",
-    )
-
-    plan_canvas.save("./test_taper_plan.svg")
-
-    # =========================
-    # SECTION A-A DRAWING
-    # =========================
-    section_canvas = SVGCanvas(scale=1.0, width=canvas_w, height=canvas_h)
-
-    section_x1 = 20.0
-    section_x2 = 580.0
-    section_y1 = 20.0
-    section_y2 = 350.0
-    section_cx = (section_x1 + section_x2) / 2
-    section_cy = (section_y1 + section_y2) / 2
-
-    sec_w = block_width_m * m_to_px
-    sec_h = block_height_m * m_to_px
-    sec_left = section_cx - (sec_w / 2)
-    sec_right = sec_left + sec_w
-
-    pipe_r = (pipe_od_large_m * m_to_px) / 2
-    pipe_cx = section_cx
-    pipe_cy = section_cy
-    sec_top = pipe_cy - (sec_h / 2)
-    sec_bottom = sec_top + sec_h
-
-    section_canvas.rect(sec_left, sec_top, sec_w, sec_h, fill="#d9d9d9", stroke="black", stroke_w=2)
-
-    crown_y = pipe_cy - pipe_r
-    ground_y = crown_y - z0_m * m_to_px
-    gw_y = ground_y + z_gw_m * m_to_px
-    z_b_section_m = (sec_bottom - ground_y) / m_to_px
-
-    section_canvas.line(section_x1, ground_y, section_x2, ground_y, stroke="black", stroke_w=2)
-    section_canvas.line(section_x1, gw_y, section_x2, gw_y, stroke="#42a5f5", stroke_w=1, dasharray="8,6")
-
-    gl_label_x = section_cx + 65.0
-    gl_label_y = ground_y - 12.0
-    tri_h = 9.0
-    tri_w = 6.0
-    tri_top_y = ground_y - tri_h
-    section_canvas.text(
-        gl_label_x,
-        gl_label_y,
-        "Ground level",
-        fill="black",
-        font_size=12,
-        font_family="Arial, sans-serif",
-        text_anchor="middle",
-    )
-    section_canvas.polygon(
-        [(gl_label_x - tri_w, tri_top_y), (gl_label_x + tri_w, tri_top_y), (gl_label_x, ground_y)],
-        fill="none",
-        stroke="black",
-        stroke_w=1.5,
-    )
-
-    section_canvas.circle(pipe_cx, pipe_cy, pipe_r, fill="white", stroke="black", stroke_w=2)
-
-    pocket_pad = 18.0
-    section_canvas.rect(
-        pipe_cx - pipe_r - pocket_pad,
-        pipe_cy - pipe_r - pocket_pad,
-        2 * (pipe_r + pocket_pad),
-        2 * (pipe_r + pocket_pad),
-        fill="none",
-        stroke="#777777",
-        stroke_w=1.2,
-        dasharray="5,4",
-    )
-
-    draw_vertical_dim(
-        section_canvas,
-        sec_left - 56.0,
-        ground_y,
-        gw_y,
-        f'Z_GW = {z_gw_m:.1f}m',
-        color="#42a5f5",
-        text_dx=-8.0,
-        text_anchor="end",
-    )
-    draw_vertical_dim(section_canvas, pipe_cx + 28.0, ground_y, crown_y, f'Z_0 = {z0_m:.1f}m')
-    draw_vertical_dim(section_canvas, sec_right + 32.0, sec_top, sec_bottom, f'H = {block_height_m:.1f}m')
-    draw_vertical_dim(section_canvas, sec_right + 98.0, ground_y, sec_bottom, f'Z_b = {z_b_section_m:.1f}m')
-
-    section_canvas.line(
-        sec_right,
-        sec_bottom,
-        sec_right + 120,
-        sec_bottom,
-        stroke="black",
-        stroke_w=1.3,
-        dasharray="8,6",
-    )
-
-    draw_horizontal_dim(section_canvas, sec_left, sec_right, sec_bottom + 16.0, f'W = {block_width_m:.1f}m')
-
-    section_canvas.text(
-        sec_left + sec_w / 2,
-        sec_bottom + 64,
-        "Section A-A",
-        fill="black",
-        font_size=13,
-        font_family="Arial, sans-serif",
-        text_anchor="middle",
-    )
-
-    section_canvas.save("./test_taper_section.svg")
+    return TaperSVGWriter(
+        thrust_block=block_input,
+        taper=taper_input,
+        canvas_w=600,
+        canvas_h=400,
+        depth_crown=z0_m,
+        gw_level=z_gw_m,
+    ).drawings()
 
 
 def build_socket_pipe_svg(od: float, canvas_w: int, canvas_h: int) -> str:
     """Draw a simple socketed pipe elevation for the blank-end case."""
-    canvas = SVGCanvas(scale=1.0, width=canvas_w, height=canvas_h)
-    centre_y = canvas_h / 2
-    pipe_len = 260.0
-    socket_len = 55.0
-    pipe_half = od / 2
-    canvas.rect(120.0, centre_y - pipe_half, pipe_len, od, fill="white", stroke="black", stroke_w=2)
-    canvas.rect(120.0 - socket_len, centre_y - pipe_half * 1.12, socket_len, od * 1.12, fill="#efefef", stroke="black", stroke_w=1.8)
-    canvas.line(60.0, centre_y, 380.0, centre_y, stroke="#999999", stroke_w=1, dasharray="6,6", stroke_opacity=0.5)
-    canvas.text(canvas_w / 2, centre_y + 42.0, "Blank End", fill="black", font_size=13, font_family="Arial, sans-serif", text_anchor="middle")
-    return _canvas_svg_string(canvas)
+    return BlankEndSVGWriter(BlankEndInput(outside_diameter=od), canvas_w, canvas_h).drawings()[0].svg
 
 
 def build_taper_thrust_svg(
@@ -2449,25 +2414,12 @@ def build_taper_thrust_svg(
     canvas_h: int,
 ) -> str:
     """Draw the taper thrust plan view as a standalone SVG string."""
-    canvas = SVGCanvas(scale=1.0, width=canvas_w, height=canvas_h)
-    m_to_px = 46.0
-    cx = canvas_w / 2
-    cy = canvas_h / 2 - 10
-    block_w = block_length * m_to_px
-    block_h = block_width * m_to_px
-    left = cx - block_w / 2
-    top = cy - block_h / 2
-    canvas.rect(left, top, block_w, block_h, fill="#d9d9d9", stroke="black", stroke_w=2)
-    taper_len = 30.0
-    pipe_large = od_large * m_to_px
-    pipe_small = od_small * m_to_px
-    taper_x = cx - taper_len / 2
-    inlet_port = canvas.make_port(taper_x, cy, 1, 0)
-    outlet_port = canvas.place_fitting_local(inlet_port, lambda: taper_local(canvas, taper_len, pipe_large, pipe_small, wall=1.0))[0]
-    canvas.text(cx, canvas_h - 16, "Plan", fill="black", font_size=13, font_family="Arial, sans-serif", text_anchor="middle")
-    draw_horizontal_dim(canvas, left, left + block_w, top + block_h + 34.0, f'L = {block_length:.1f} m')
-    draw_vertical_dim(canvas, left + block_w + 34.0, top, top + block_h, f'W = {block_width:.1f}m')
-    return _canvas_svg_string(canvas)
+    return TaperSVGWriter(
+        thrust_block=ThrustBlockInput(height=block_height, width=block_width, length=block_length, depth=0.0),
+        taper=TaperInput(outside_diameter_large=od_large, outside_diameter_small=od_small),
+        canvas_w=canvas_w,
+        canvas_h=canvas_h,
+    ).drawings()[0].svg
 
 
 def build_taper_thrust_section_svg(
@@ -2482,31 +2434,14 @@ def build_taper_thrust_section_svg(
     canvas_h: int,
 ) -> str:
     """Draw the taper thrust section as a standalone SVG string."""
-    canvas = SVGCanvas(scale=1.0, width=canvas_w, height=canvas_h)
-    m_to_px = 46.0
-    cx = canvas_w / 2
-    cy = canvas_h / 2
-    sec_w = block_width * m_to_px
-    sec_h = block_height * m_to_px
-    left = cx - sec_w / 2
-    top = cy - sec_h / 2
-    right = left + sec_w
-    bottom = top + sec_h
-    pipe_r = od_large * m_to_px / 2
-    crown_y = cy - pipe_r
-    ground_y = crown_y - depth_crown * m_to_px
-    gw_y = ground_y + gw_level * m_to_px
-    canvas.rect(left, top, sec_w, sec_h, fill="#d9d9d9", stroke="black", stroke_w=2)
-    canvas.line(20.0, ground_y, canvas_w - 20.0, ground_y, stroke="black", stroke_w=2)
-    canvas.line(20.0, gw_y, canvas_w - 20.0, gw_y, stroke="#42a5f5", stroke_w=1, dasharray="8,6")
-    canvas.circle(cx, cy, pipe_r, fill="white", stroke="black", stroke_w=2)
-    draw_vertical_dim(canvas, left - 56.0, ground_y, gw_y, f'Z_GW = {gw_level:.1f}m', color="#42a5f5", text_dx=-8.0, text_anchor="end")
-    draw_vertical_dim(canvas, cx + 28.0, ground_y, crown_y, f'Z_0 = {depth_crown:.1f}m')
-    draw_vertical_dim(canvas, right + 32.0, top, bottom, f'H = {block_height:.1f}m')
-    draw_vertical_dim(canvas, right + 98.0, ground_y, bottom, f'Z_b = {block_depth:.1f}m')
-    draw_horizontal_dim(canvas, left, right, bottom + 16.0, f'W = {block_width:.1f}m')
-    canvas.text(left + sec_w / 2, bottom + 64, "Section A-A", fill="black", font_size=13, font_family="Arial, sans-serif", text_anchor="middle")
-    return _canvas_svg_string(canvas)
+    return TaperSVGWriter(
+        thrust_block=ThrustBlockInput(height=block_height, width=block_width, length=block_length, depth=block_depth),
+        taper=TaperInput(outside_diameter_large=od_large, outside_diameter_small=od_large),
+        canvas_w=canvas_w,
+        canvas_h=canvas_h,
+        depth_crown=depth_crown,
+        gw_level=gw_level,
+    ).drawings()[1].svg
 
 
 def build_horizontal_bend(
@@ -2523,164 +2458,15 @@ def build_horizontal_bend(
     canvas_h: int,
 ) -> str:
     """Draw the horizontal bend plan view as a standalone SVG string."""
-    canvas = SVGCanvas(scale=1.0, width=canvas_w, height=canvas_h)
-    m_to_px = 46.0
-    cx = canvas_w / 2
-    cy = canvas_h / 2 - 10.0
-    bend_diameter = od * m_to_px
-    bend_radius = max(bend_diameter * 1.35, 62.0)
-    theta = math.radians(angle)
-    mid_theta = theta / 2.0
-    rotation_deg = start_angle + math.degrees(mid_theta) - 90.0
-    rotation_rad = math.radians(rotation_deg)
-    cos_r = math.cos(rotation_rad)
-    sin_r = math.sin(rotation_rad)
-
-    def _rotate_local_point(x: float, y: float) -> tuple[float, float]:
-        return (
-            bend_cx + x * cos_r - y * sin_r,
-            bend_cy + x * sin_r + y * cos_r,
-        )
-
-    def _rotate_local_vector(x: float, y: float) -> tuple[float, float]:
-        return (
-            x * cos_r - y * sin_r,
-            x * sin_r + y * cos_r,
-        )
-
-    # Place the bend so the rotated arc midpoint sits at the canvas centre.
-    mid_x_local = bend_radius * math.sin(mid_theta)
-    mid_y_local = -bend_radius * (1.0 - math.cos(mid_theta))
-    mid_x_rot, mid_y_rot = _rotate_local_vector(mid_x_local, mid_y_local)
-    bend_cx = cx - mid_x_rot
-    bend_cy = cy - mid_y_rot
-
-    inlet_port = canvas.make_port(bend_cx, bend_cy, math.cos(rotation_rad), math.sin(rotation_rad))
-    bend_ports = canvas.place_fitting_local(
-        inlet_port,
-        lambda: bend_local(
-            canvas,
-            radius_px=bend_radius,
-            diameter_px=bend_diameter,
-            angle_deg=angle,
-        ),
-    )
-
-    upstream_socket_length_px = 1.5 * m_to_px
-    upstream_socket_port = canvas.place_fitting_local(
-        inlet_port,
-        lambda: socket_pipe_local(
-            canvas,
-            length=upstream_socket_length_px,
-            diameter=bend_diameter,
-            socket_length=upstream_socket_length_px * 0.15,
-            socket_od=bend_diameter * 1.12,
-            is_inlet=True,
-        ),
-    )[0]
-
-    downstream_socket_length_px = 1.5 * m_to_px
-    downstream_socket_ports = canvas.place_fitting_local(
-        bend_ports[1],
-        lambda: socket_pipe_local(
-            canvas,
-            length=downstream_socket_length_px,
-            diameter=bend_diameter,
-            socket_length=downstream_socket_length_px * 0.15,
-            socket_od=bend_diameter * 1.12,
-            is_inlet=False,
-            draw_barrel=False,
-        ),
-    )
-    downstream_pipe_length_px = 1.5 * m_to_px
-    canvas.pipe_from_port(
-        downstream_socket_ports[1],
-        length=downstream_pipe_length_px,
-        diameter=bend_diameter,
-    )
-
-    # Thrust line is drawn through the midpoint of the bend arc and is normal to the centreline there.
-    normal_x_local = math.sin(mid_theta)
-    normal_y_local = math.cos(mid_theta)
-
-    contact_x, contact_y = _rotate_local_point(mid_x_local, mid_y_local)
-
-    thrust_ux, thrust_uy = _rotate_local_vector(normal_x_local, normal_y_local)
-    thrust_len = math.hypot(thrust_ux, thrust_uy)
-    if thrust_len == 0:
-        thrust_ux, thrust_uy = 1.0, 0.0
-    else:
-        thrust_ux /= thrust_len
-        thrust_uy /= thrust_len
-
-    arrow_len = 92.0
-    head_len = 14.0
-    wall_x = contact_x + thrust_ux * (bend_diameter / 2)
-    wall_y = contact_y + thrust_uy * (bend_diameter / 2)
-    block_length_px = block_length * m_to_px
-    block_width_px = block_width * m_to_px
-    block_cx = wall_x + thrust_ux * (block_length_px / 2)
-    block_cy = wall_y + thrust_uy * (block_length_px / 2)
-    block_vx = -thrust_uy
-    block_vy = thrust_ux
-    block_points = [
-        (
-            block_cx - block_vx * (block_width_px / 2) - thrust_ux * (block_length_px / 2),
-            block_cy - block_vy * (block_width_px / 2) - thrust_uy * (block_length_px / 2),
-        ),
-        (
-            block_cx + block_vx * (block_width_px / 2) - thrust_ux * (block_length_px / 2),
-            block_cy + block_vy * (block_width_px / 2) - thrust_uy * (block_length_px / 2),
-        ),
-        (
-            block_cx + block_vx * (block_width_px / 2) + thrust_ux * (block_length_px / 2),
-            block_cy + block_vy * (block_width_px / 2) + thrust_uy * (block_length_px / 2),
-        ),
-        (
-            block_cx - block_vx * (block_width_px / 2) + thrust_ux * (block_length_px / 2),
-            block_cy - block_vy * (block_width_px / 2) + thrust_uy * (block_length_px / 2),
-        ),
-    ]
-
-    canvas.polygon(
-        block_points,
-        fill="#d9d9d9",
-        stroke="black",
-        stroke_w=2,
-    )
-
-    head_base_x = wall_x - thrust_ux * head_len
-    head_base_y = wall_y - thrust_uy * head_len
-    shaft_start_x = wall_x - thrust_ux * arrow_len
-    shaft_start_y = wall_y - thrust_uy * arrow_len
-
-    canvas.line(shaft_start_x, shaft_start_y, head_base_x, head_base_y, stroke="#d32f2f", stroke_w=2.3)
-    canvas.polygon(
-        [
-            (wall_x, wall_y),
-            (head_base_x - thrust_uy * 7.0, head_base_y + thrust_ux * 7.0),
-            (head_base_x + thrust_uy * 7.0, head_base_y - thrust_ux * 7.0),
-        ],
-        fill="#d32f2f",
-        stroke="#d32f2f",
-        stroke_w=1,
-    )
-    shaft_mid_x = (shaft_start_x + head_base_x) / 2
-    shaft_mid_y = (shaft_start_y + head_base_y) / 2
-    label_padding = 16.0
-    canvas.text(
-        shaft_start_x - label_padding,
-        shaft_mid_y,
-        "T",
-        fill="#d32f2f",
-        font_size=18,
-        font_family="Arial, sans-serif",
-        text_anchor="middle",
-        dominant_baseline="middle",
-    )
-
-    canvas.text(cx, canvas_h - 16.0, "Plan", fill="black", font_size=13, font_family="Arial, sans-serif", text_anchor="middle")
-    return _canvas_svg_string(canvas)
+    return HorizontalBendSVGWriter(
+        thrust_block=ThrustBlockInput(height=block_height, width=block_width, length=block_length, depth=block_depth),
+        bend=BendInput(outside_diameter=od, angle=angle, radius=0.0),
+        canvas_w=canvas_w,
+        canvas_h=canvas_h,
+        depth_crown=depth_crown,
+        gw_level=gw_level,
+        start_angle=start_angle,
+    ).drawings()[0].svg
 
 
 def build_horizontal_bend_section_svg(
@@ -2694,32 +2480,16 @@ def build_horizontal_bend_section_svg(
     canvas_w: int,
     canvas_h: int,
 ) -> str:
-    """Draw the horizontal bend section as a standalone SVG string."""
-    canvas = SVGCanvas(scale=1.0, width=canvas_w, height=canvas_h)
-    m_to_px = 46.0
-    cx = canvas_w / 2
-    cy = canvas_h / 2
-    sec_w = block_width * m_to_px
-    sec_h = block_height * m_to_px
-    left = cx - sec_w / 2
-    top = cy - sec_h / 2
-    right = left + sec_w
-    bottom = top + sec_h
-    pipe_r = od * m_to_px / 2
-    crown_y = cy - pipe_r
-    ground_y = crown_y - depth_crown * m_to_px
-    gw_y = ground_y + gw_level * m_to_px
-    canvas.rect(left, top, sec_w, sec_h, fill="#d9d9d9", stroke="black", stroke_w=2)
-    canvas.line(20.0, ground_y, canvas_w - 20.0, ground_y, stroke="black", stroke_w=2)
-    canvas.line(20.0, gw_y, canvas_w - 20.0, gw_y, stroke="#42a5f5", stroke_w=1, dasharray="8,6")
-    canvas.circle(cx, cy, pipe_r, fill="white", stroke="black", stroke_w=2)
-    draw_vertical_dim(canvas, left - 56.0, ground_y, gw_y, f'Z_GW = {gw_level:.1f}m', color="#42a5f5", text_dx=-8.0, text_anchor="end")
-    draw_vertical_dim(canvas, cx + 28.0, ground_y, crown_y, f'Z_0 = {depth_crown:.1f}m')
-    draw_vertical_dim(canvas, right + 32.0, top, bottom, f'H = {block_height:.1f}m')
-    draw_vertical_dim(canvas, right + 98.0, ground_y, bottom, f'Z_b = {(bottom - ground_y) / m_to_px:.1f}m')
-    draw_horizontal_dim(canvas, left, right, bottom + 16.0, f'W = {block_width:.1f}m')
-    canvas.text(left + sec_w / 2, bottom + 64, "Section A-A", fill="black", font_size=13, font_family="Arial, sans-serif", text_anchor="middle")
-    return _canvas_svg_string(canvas)
+    """Backward-compatible helper that returns the horizontal bend plan SVG string."""
+    return HorizontalBendSVGWriter(
+        thrust_block=ThrustBlockInput(height=block_height, width=block_width, length=block_length, depth=block_depth),
+        bend=BendInput(outside_diameter=od, angle=0.0, radius=0.0),
+        canvas_w=canvas_w,
+        canvas_h=canvas_h,
+        depth_crown=depth_crown,
+        gw_level=gw_level,
+        start_angle=0.0,
+    ).drawings()[0].svg
 
 
 def build_vertical_upturn_bend_section_svg(
@@ -2736,31 +2506,40 @@ def build_vertical_upturn_bend_section_svg(
     canvas_h: int,
 ) -> str:
     """Draw the vertical upturn bend section as a standalone SVG string."""
-    canvas = SVGCanvas(scale=1.0, width=canvas_w, height=canvas_h)
-    m_to_px = 46.0
-    cx = canvas_w / 2
-    cy = canvas_h / 2
-    sec_w = block_width * m_to_px
-    sec_h = block_height * m_to_px
-    left = cx - sec_w / 2
-    top = cy - sec_h / 2
-    right = left + sec_w
-    bottom = top + sec_h
-    pipe_r = od * m_to_px / 2
-    crown_y = cy - pipe_r
-    ground_y = crown_y - depth_crown * m_to_px
-    gw_y = ground_y + gw_level * m_to_px
-    canvas.rect(left, top, sec_w, sec_h, fill="#d9d9d9", stroke="black", stroke_w=2)
-    canvas.line(20.0, ground_y, canvas_w - 20.0, ground_y, stroke="black", stroke_w=2)
-    canvas.line(20.0, gw_y, canvas_w - 20.0, gw_y, stroke="#42a5f5", stroke_w=1, dasharray="8,6")
-    canvas.circle(cx, cy, pipe_r, fill="white", stroke="black", stroke_w=2)
-    draw_vertical_dim(canvas, left - 56.0, ground_y, gw_y, f'Z_GW = {gw_level:.1f}m', color="#42a5f5", text_dx=-8.0, text_anchor="end")
-    draw_vertical_dim(canvas, cx + 28.0, ground_y, crown_y, f'Z_0 = {depth_crown:.1f}m')
-    draw_vertical_dim(canvas, right + 32.0, top, bottom, f'H = {block_height:.1f}m')
-    draw_vertical_dim(canvas, right + 98.0, ground_y, bottom, f'Z_b = {(bottom - ground_y) / m_to_px:.1f}m')
-    draw_horizontal_dim(canvas, left, right, bottom + 16.0, f'W = {block_width:.1f}m')
-    canvas.text(left + sec_w / 2, bottom + 64, "Section A-A", fill="black", font_size=13, font_family="Arial, sans-serif", text_anchor="middle")
-    return _canvas_svg_string(canvas)
+    return VerticalBendSVGWriter(
+        thrust_block=ThrustBlockInput(height=block_height, width=block_width, length=block_length, depth=block_depth),
+        bend=BendInput(outside_diameter=od, angle=angle, radius=0.0),
+        canvas_w=canvas_w,
+        canvas_h=canvas_h,
+        depth_crown=depth_crown,
+        gw_level=gw_level,
+        bend_orientation=bend_orientation,
+    ).drawings()[0].svg
+
+
+def build_vertical_downturn_bend_section_svg(
+    block_height: float,
+    block_width: float,
+    block_length: float,
+    block_depth: float,
+    gw_level: float,
+    od: float,
+    depth_crown: float,
+    angle: float,
+    canvas_w: int,
+    canvas_h: int,
+) -> str:
+    """Draw the vertical downturn bend longitudinal section as a standalone SVG string."""
+    writer = VerticalBendSVGWriter(
+        thrust_block=ThrustBlockInput(height=block_height, width=block_width, length=block_length, depth=block_depth),
+        bend=BendInput(outside_diameter=od, angle=angle, radius=0.0),
+        canvas_w=canvas_w,
+        canvas_h=canvas_h,
+        depth_crown=depth_crown,
+        gw_level=gw_level,
+        bend_orientation=-90.0,
+    )
+    return writer.downturn_drawings()[0].svg
 
 
 if __name__ == "__main__":

@@ -1,3 +1,60 @@
+"""Project-focused VIKTOR controller for the current thrust-restraint application.
+
+This module represents the generic application root for engineering project entities.
+The fixed VIKTOR container is now ``ProjectsRoot``; it is the top-level entry point that
+owns user-created ``Project`` entities. Each ``Project`` remains the primary aggregation
+and reporting layer for its individual calculation entities.
+
+The current hierarchy is:
+
+ProjectsRoot
+      │
+      └── Project
+              │
+              ├── ThrustBlock
+              └── AnchorBlock
+
+The ``ProjectsRoot`` controller is application-level infrastructure. It is not where the
+engineering calculations live. Instead, it manages the project tree and gives the user a
+simple container from which they can create and open project entities.
+
+The ``Project`` entity is still the engineering project-level coordinator. It retrieves
+child entities, reads their persisted parameter sets, rehydrates calculation objects from
+``app.civeng1``, aggregates results, and produces the existing views and reports. This
+controller layer primarily handles VIKTOR entity organisation, child discovery, result
+aggregation, Excel export, Word report generation, and PDF conversion/download.
+
+The high-level data flow is:
+
+VIKTOR Project
+      │
+      ├── ThrustBlock children
+      └── AnchorBlock children
+              │
+              ▼
+      retrieve saved parameters
+              │
+              ▼
+    reconstruct calculation objects
+              │
+              ▼
+      aggregate results
+              │
+      ┌───────┼─────────┐
+      ▼       ▼         ▼
+    Views    Excel    Word/PDF
+
+This pass intentionally keeps the thrust-restraint calculation logic unchanged. Future
+engineering modules such as Soil Embedment will be introduced later under the broader
+project architecture, but the current implementation remains a project-centric container
+with a single engineering project type underneath it.
+
+# NOTE:
+# This module was originally the thrust-restraint root.
+# It now represents the generic Projects root.
+# The folder will be renamed during a later cleanup pass.
+"""
+
 import viktor as vkt
 import pandas as pd
 from pathlib import Path
@@ -11,12 +68,89 @@ from openpyxl import load_workbook
 from openpyxl.styles import Font, Alignment
 
 
-class Controller(vkt.Controller):
-    label = "ThrustRoot"
-    children = ["Project"]  # Allow MyFolder entities at top level
+class ProjectsRootParametrization(vkt.Parametrization):
+    """Minimal editor configuration for the fixed ``Projects`` root.
+
+    Purpose
+    -------
+    This parametrization is intentionally lightweight. It does not store engineering data.
+    Instead it gives the fixed root editor a simple ``ChildEntityManager`` so users can
+    create, open, and delete ``Project`` entities from within the root container.
+
+    ``vkt.ChildEntityManager("Project")`` is a VIKTOR UI/navigation mechanism: it provides
+    a project management surface in the root entity editor, while the actual project
+    entities still live in the VIKTOR entity tree as genuine child entities.
+
+    Notes
+    -----
+    The manager is only a user-interface mechanism for project navigation and creation. It
+    does not store the projects itself; it simply exposes the child project entities to the
+    user through the root editor.
+    """
+
+    projects = vkt.ChildEntityManager("Project")
+
+
+class ProjectsRoot(vkt.Controller):
+    """Fixed VIKTOR container for all engineering project entities.
+
+    Purpose
+    -------
+    This class represents the application-level ``Projects`` container. It is the top-level
+    VIKTOR entity that owns all user-created ``Project`` instances.
+
+    The important configuration is:
+
+    ``children = ["Project"]``
+
+    so the root contains only project entities. The root itself does not implement
+    engineering calculations; it simply provides the fixed container in which engineering
+    projects live.
+
+    ``show_children_as = "Cards"``
+
+    causes the VIKTOR UI to display the child ``Project`` entities as cards rather than as
+    a list or table.
+    """
+
+    label = "Projects"
+    children = ["Project"]
     show_children_as = "Cards"
+    parametrization = ProjectsRootParametrization
+
 
 class ProjectParametrization(vkt.Parametrization):
+    """Project/report-level metadata stored on the ``Project`` entity.
+
+    Purpose
+    -------
+    This parametrization does not hold the detailed engineering inputs for an individual
+    thrust block. Instead, it stores the operational metadata for the project report: the
+    producer, title, client, report date, and version history that appear in the
+    generated documents.
+
+    The fields here are intentionally report-oriented:
+
+    - ``producer_name`` identifies the producing organisation.
+    - ``project_title`` is the main title embedded in reports and downloads.
+    - ``report_date`` is the date of the generated report.
+    - ``client_name`` and ``client_representative`` identify the client context.
+    - ``version_history`` tracks changes and approvals across project revisions.
+    - The three download buttons call methods on the ``Project`` controller for the
+      corresponding export actions.
+
+    ``version_history`` is a ``DynamicArray`` because the project may have multiple
+    revisions, issues, or review stages over time. Each entry in the array can store a
+    separate issue/revision row, and the reporting logic later transforms that list into a
+    table suitable for the UI and Word document.
+
+    Notes
+    -----
+    The download buttons are not independent business logic. They are VIKTOR actions that
+    trigger methods on the ``Project`` entity, which then produce the actual Excel, Word,
+    or PDF outputs.
+    """
+
     producer_name = vkt.TextField("Producer", default="Arcadian 1")
     project_title = vkt.TextField("Project Title", default="Warton AMP8 - Growth")
     report_date = vkt.DateField("Report Date")
@@ -42,29 +176,120 @@ class ProjectParametrization(vkt.Parametrization):
     version_history.approved_by = vkt.TextField("Approved By")
     version_history.status = vkt.OptionField("Status", options=["Draft", "Checked", "Reviewed", "Approved", "Rejected"], default="Draft")
 
-    
     # Download button for Word document
     lb = vkt.LineBreak()
     download_pdf = vkt.DownloadButton("Download PDF Report", method="download_pdf_document")
     download_excel = vkt.DownloadButton("Download Excel Report", method="export_to_excel")
     download_word = vkt.DownloadButton("Download Word Report", method="download_word_document")
 
+
+# Project
+# │
+# ├── owns project/report metadata
+# │
+# ├── contains ThrustBlock and AnchorBlock entities
+# │
+# ├── retrieves children's saved parameters
+# │
+# ├── rebuilds engineering calculation objects
+# │
+# ├── aggregates results
+# │
+# └── produces views and reports
 class Project(vkt.Controller):
+    """Main orchestration layer for a thrust-restraint project.
+
+    Purpose
+    -------
+    This class is the current aggregation and reporting layer for a project entity. It does
+    not contain all engineering logic itself, but it owns the project-level context and
+    coordinates the child calculation entities below it.
+
+    The configuration:
+
+    ``children = ["ThrustBlock", "AnchorBlock"]``
+
+    tells VIKTOR that a ``Project`` entity can contain both individual thrust-block and
+    anchor-block child entities. Those entities represent the actual calculation items that
+    are later summarised and reported.
+
+    Data flow
+    ---------
+    The class is responsible for:
+
+    1. retrieving child entities from VIKTOR;
+    2. reading each child's ``last_saved_params``;
+    3. reconstructing the appropriate engineering object through
+       ``fitting_from_params`` or ``build_metallic_flange``;
+    4. aggregating safety checks, dimensions, and workflow rows;
+    5. displaying summary tables in VIKTOR views;
+    6. producing Excel, Word, and PDF outputs.
+
+    Method map
+    ----------
+    Child retrieval
+    ├── get_thrust_block_children()
+    └── get_anchor_block_children()
+
+    Data aggregation
+    ├── get_version_history_table_data()
+    ├── block_safety_table()
+    ├── get_block_workflows()
+    └── get_thrust_block_params()
+
+    Interactive VIKTOR views
+    ├── view_version_history()
+    ├── export_view()
+    ├── thrust_table()
+    └── pdf_view()
+
+    Report generation
+    ├── export_to_excel()
+    ├── generate_word_document()
+    ├── download_word_document()
+    └── download_pdf_document()
+
+    Notes
+    -----
+    The project controller is deliberately an orchestration layer rather than a full
+    domain model. The actual engineering calculations live in the imported classes from
+    ``app.civeng1``; this file mainly turns VIKTOR entity data into reportable results.
+    """
+
     label = "Project"
     children = ["ThrustBlock", "AnchorBlock"]
     show_children_as = "Table"
-    parametrization = ProjectParametrization #type: ignore
+    parametrization = ProjectParametrization  # type: ignore
 
+    # ---------------------------------------------------------------------------
+    # Helper data preparation
+    # ---------------------------------------------------------------------------
     def get_version_history_table_data(self, params, **kwargs):
+        """Convert the project version history into a plain row-based structure.
+
+        Purpose
+        -------
+        This helper prepares the version metadata stored in ``params.version_history`` into
+        the row shape expected by VIKTOR tables and the Word template.
+
+        Data flow
+        ---------
+        The data originates in the ``ProjectParametrization`` dynamic array and is read one
+        version entry at a time. Each row is normalised to a list containing issue,
+        revision, date, reviewer fields, and status.
+
+        Returns
+        -------
+        list[list[object]]
+            A list of row lists, each row corresponding to one project issue or revision.
+
+        Notes
+        -----
+        This method is used both for the VIKTOR version-history table and when filling the
+        Word report's version table. The logic deliberately keeps the same data structure for
+        both consumers.
         """
-        Helper method to generate version history table data.
-        Returns headers and rows that can be used in both TableView and Word export.
-        
-        Returns:
-            list[list[Any]]: table_data where table_data is a list of row lists
-        """
-       
-        # Build table rows from version history
+
         table_data = []
         for version in params.version_history:
             row = [
@@ -77,76 +302,196 @@ class Project(vkt.Controller):
                 version.status,
             ]
             table_data.append(row)
-        
+
         return table_data
-    
+
+    # ---------------------------------------------------------------------------
+    # Child entity retrieval
+    # ---------------------------------------------------------------------------
     def get_thrust_block_children(self, params, **kwargs) -> list[vkt.api_v1.Entity]:
-        # Collect child entity params
-        entity_id = kwargs['entity_id']
-        
-        # Access child entities using the API
-        # This gets all children of the current entity
-        children = vkt.api_v1.API().get_entity_children(entity_id) 
-        
-        # Filter by entity type
-        thrust_blocks = [child for child in children if child.entity_type.name == 'ThrustBlock']
+        """Return the direct ``ThrustBlock`` child entities for the current project.
+
+        Purpose
+        -------
+        This is a helper method used throughout the controller to avoid repeating the same
+        child-discovery logic. It is responsible for locating all direct children that are
+        thrust-block calculation entities.
+
+        Data flow
+        ---------
+        VIKTOR passes the current entity identifier through ``kwargs`` when the method is
+        invoked from a controller action or view. The code reads ``entity_id`` and requests
+        all direct child entities from the VIKTOR API.
+
+        ``vkt.api_v1.API().get_entity_children(entity_id)`` returns the complete direct child
+        set of the current project entity. The list is then filtered to keep only children
+        whose ``entity_type.name`` equals ``"ThrustBlock"``.
+
+        Returns
+        -------
+        list[vkt.api_v1.Entity]
+            Direct child entities that represent thrust-block calculations.
+
+        Notes
+        -----
+        A VIKTOR ``Entity`` is the persisted object representing a node in the project tree.
+        The same pattern is used for both thrust blocks and anchor blocks so child entities
+        can be discovered consistently across views and export workflows.
+        """
+
+        entity_id = kwargs["entity_id"]
+        children = vkt.api_v1.API().get_entity_children(entity_id)
+        thrust_blocks = [child for child in children if child.entity_type.name == "ThrustBlock"]
 
         return thrust_blocks
-    
+
     def get_anchor_block_children(self, params, **kwargs) -> list[vkt.api_v1.Entity]:
-        # Collect child entity params
-        entity_id = kwargs['entity_id']
-        
-        # Access child entities using the API
-        # This gets all children of the current entity
-        children = vkt.api_v1.API().get_entity_children(entity_id) 
-        
-        # Filter by entity type
-        anchor_blocks = [child for child in children if child.entity_type.name == 'AnchorBlock']
+        """Return the direct ``AnchorBlock`` child entities for the current project.
+
+        Purpose
+        -------
+        This helper mirrors ``get_thrust_block_children`` but selects anchor-block entities
+        instead. It centralises the repeated child-discovery logic used by reporting and
+        summary methods.
+
+        Data flow
+        ---------
+        The method reads the current VIKTOR ``entity_id`` from ``kwargs`` and requests all
+        direct children from the VIKTOR API. It then filters the list to keep only entities
+        whose ``entity_type.name`` matches ``"AnchorBlock"``.
+
+        Returns
+        -------
+        list[vkt.api_v1.Entity]
+            Direct child entities that represent anchor-block calculations.
+
+        Notes
+        -----
+        These helper methods are used throughout the rest of the controller so the code does
+        not repeatedly discover the same child entity sets in every view or export.
+        """
+
+        entity_id = kwargs["entity_id"]
+        children = vkt.api_v1.API().get_entity_children(entity_id)
+        anchor_blocks = [child for child in children if child.entity_type.name == "AnchorBlock"]
 
         return anchor_blocks
-    
+
+    # ---------------------------------------------------------------------------
+    # Data aggregation helpers
+    # ---------------------------------------------------------------------------
     def export_to_excel(self, params, **kwargs):
-        """Export the dimensions to an Excel file."""
-        # Create a new workbook and select the active sheet
-        template_path =  Path(__file__).parent / "files" / "arcadis_calculation_sheet_template.xlsx"
+        """Export the project's thrust-block calculation output to an Excel workbook.
+
+        Purpose
+        -------
+        This method creates a workbook from the project template, copies one template sheet
+        for each thrust-block child, and fills the worksheet with the calculation workflow
+        results produced by the domain objects.
+
+        Data flow
+        ---------
+        The method opens the Arcadis template workbook, finds all ``ThrustBlock`` children,
+        and for each child reads the saved parameter set from ``child.last_saved_params``.
+        That persisted parameter set is the authoritative state saved on the VIKTOR child
+        entity. The parent project then reconstructs the engineering calculation object using
+        ``fitting_from_params``.
+
+        The workbook then copies the template sheet named ``Thrust Block 1`` and renames it
+        after the child entity. The calculation rows in ``fitting_type.fitting_workflow_res``
+        are written into the relevant spreadsheet cells.
+
+        Returns
+        -------
+        vkt.DownloadResult
+            A downloadable Excel file with the project title used in the output filename.
+
+        Notes
+        -----
+        This workflow is intentionally driven by the saved child parameter state rather than
+        by recomputing from the parent entity. The individual fields written are:
+
+        - ``entry["label"]``: row label text;
+        - ``entry["formula_xls"]``: spreadsheet formula or formula text;
+        - ``entry["output"]``: calculated result;
+        - ``entry["si_unit"]``: unit used in the output;
+        - ``entry["reference"]``: reference/source text.
+
+        The original blank template sheet is removed before saving so only the filled child
+        sheets remain in the final workbook.
+        """
+
+        template_path = Path(__file__).parent / "files" / "arcadis_calculation_sheet_template.xlsx"
         wb = load_workbook(template_path)
 
         thrust_blocks = self.get_thrust_block_children(params, **kwargs)
         for child in thrust_blocks:
-            child_params = child.last_saved_params  # Get the saved parameters
+            # ``child.last_saved_params`` is the persisted/saved parametrization for the
+            # child VIKTOR entity. The parent project needs it to reconstruct the same
+            # calculation state that was saved with the child.
+            child_params = child.last_saved_params
             ws = wb.copy_worksheet(wb["Thrust Block 1"])
             ws.title = f"{child.name}"
 
             fitting_type = fitting_from_params(params=child_params)
             for i, entry in enumerate(fitting_type.fitting_workflow_res):
                 num = 7
-                # Add the dimension data
                 row = num + i
                 ws[f"A{row}"] = entry["label"]
                 ws[f"B{row}"] = entry["formula_xls"]
                 ws[f"F{row}"] = entry["output"]
                 ws[f"I{row}"] = entry["si_unit"]
                 ws[f"J{row}"] = entry["reference"]
-        
+
         wb.remove(wb["Thrust Block 1"])
-        # Save the workbook to a file
         from io import BytesIO
+
         buffer = BytesIO()
         wb.save(buffer)
         buffer.seek(0)
 
         excel_file = vkt.File.from_data(buffer.read())
-        
-        return vkt.DownloadResult(excel_file, f'{params.project_title}_thrust_restraint_calculation.xlsx')
-    
+
+        return vkt.DownloadResult(excel_file, f"{params.project_title}_thrust_restraint_calculation.xlsx")
+
     def block_safety_table(self, params, **kwargs):
+        """Aggregate safety and pass/fail statuses for each child calculation.
+
+        Purpose
+        -------
+        This method turns each child calculation into a compact summary row that can be used
+        in UI tables and Word reports. It records the child name, fitting type, chainage,
+        and the result of several engineering checks.
+
+        Data flow
+        ---------
+        The method finds all thrust-block and anchor-block children, reads each child's saved
+        parameter set, and reconstructs a domain calculation object. For thrust blocks the
+        code checks the standard thrust pass-through behaviour, plus vertical downturn and
+        vertical upturn specific checks when relevant. For anchor blocks the logic builds a
+        metallic flange object and evaluates its corresponding checks.
+
+        Returns
+        -------
+        list[dict]
+            A list of summary rows where each row contains the child name, fitting type,
+            pass/fail values, and chainage.
+
+        Notes
+        -----
+        The method intentionally yields values of ``Pass``, ``Fail``, or ``N/A`` depending on
+        the relevant calculation type and available checks. This preserves the existing
+        reporting behaviour even though the logic is repeated and somewhat type-specific.
+        """
+
         thrust_blocks = self.get_thrust_block_children(params, **kwargs)
         anchor_blocks = self.get_anchor_block_children(params, **kwargs)
 
         data_rows = []
         for child in thrust_blocks:
-            child_params = child.last_saved_params  # Get the saved parameters
+            # ``child.last_saved_params`` stores the persisted input state for this child.
+            # The project rehydrates the calculation object so it can report its checks.
+            child_params = child.last_saved_params
 
             fitting_type = fitting_from_params(params=child_params)
             if isinstance(fitting_type, VerticalDownturnBendThrustBlock):
@@ -160,110 +505,159 @@ class Project(vkt.Controller):
                 vertical_thrust = "N/A"
 
             if isinstance(fitting_type, VerticalUpturnBendThrustBlock):
-                overturning_moment_check = "N/A" 
+                overturning_moment_check = "N/A"
             else:
                 overturning_moment_check = "Pass" if fitting_type.overturning_check else "Fail"
-            # Access specific fields from the child's parametrization
+
             row = {
                 "name": child.name,
                 "fitting_type": child_params.fitting_section.fitting_type,
-                "thrust_pass_through_check": "Pass" if fitting_type.thrust_pass_through_check else "Fail", 
+                "thrust_pass_through_check": "Pass" if fitting_type.thrust_pass_through_check else "Fail",
                 "overturning_moment_check": overturning_moment_check,
                 "vertical_thrust_check": vertical_thrust,
                 "uplift_check": uplift_test,
-                "chainage": child_params.fitting_section.chainage
-                # Add more fields as needed
+                "chainage": child_params.fitting_section.chainage,
             }
             data_rows.append(row)
 
         for child in anchor_blocks:
-            child_params = child.last_saved_params  # Get the saved parameters
+            # ``child.last_saved_params`` is still the persisted child configuration; this
+            # workflow reconstructs a metallic flange domain object from that saved state.
+            child_params = child.last_saved_params
             metallic_flange = build_metallic_flange(child_params)
             row = {
                 "name": child.name,
                 "fitting_type": child_params.pipe_section.pipe_material,
-                "thrust_pass_through_check": "Pass" if metallic_flange.thrust_pass_through_check else "Fail", 
+                "thrust_pass_through_check": "Pass" if metallic_flange.thrust_pass_through_check else "Fail",
                 "overturning_moment_check": "Pass" if metallic_flange.overturning_check else "Fail",
                 "vertical_thrust_check": "N/A",
                 "uplift_check": "N/A",
-                "chainage": child_params.pipe_section.chainage
-                # Add more fields as needed
+                "chainage": child_params.pipe_section.chainage,
             }
             data_rows.append(row)
 
         return data_rows
-    
+
     def get_block_workflows(self, params, **kwargs):
+        """Build appendix-style workflow tables from each child calculation object.
+
+        Purpose
+        -------
+        This method converts the calculation object's ``fitting_workflow_res`` rows into a
+        report-friendly structure for the Word template appendices.
+
+        Data flow
+        ---------
+        Each child is resolved from its saved parameter set and rebuilt into a calculation
+        object. The object exposes ``fitting_workflow_res`` which contains entries such as
+        ``label``, ``formula_html``, and ``reference``. These rows are copied into simpler
+        dictionaries so they can be inserted into the Word document.
+
+        Returns
+        -------
+        list[dict]
+            One appendix entry per child calculation. Each entry contains a title and a
+            list of workflow rows.
+
+        Notes
+        -----
+        The important fields are:
+
+        - ``label``: human-readable description of the calculation line;
+        - ``formula_html``: formula rendered for the report;
+        - ``reference``: supporting reference text.
+
+        Each child calculation becomes an appendix entry with a title such as
+        ``"<fitting type> Calculation"`` or ``"<material> Contraction Calculation"``.
+        """
+
         thrust_blocks = self.get_thrust_block_children(params, **kwargs)
         anchor_blocks = self.get_anchor_block_children(params, **kwargs)
 
         appendices = []
         for child in thrust_blocks:
-            child_params = child.last_saved_params  # Get the saved parameters
+            # ``child.last_saved_params`` is the persisted child input state. This saved data
+            # is used to reconstruct the calculation object and its reporting workflow.
+            child_params = child.last_saved_params
 
             fitting_type = fitting_from_params(params=child_params)
             table4 = []
             for row in fitting_type.fitting_workflow_res:
                 table4.append({
-                    "label": row['label'],
-                    "formula": row['formula_html'],
-                    "reference": row['reference'],
+                    "label": row["label"],
+                    "formula": row["formula_html"],
+                    "reference": row["reference"],
                 })
 
             appendices.append({
                 "title": f"{child_params.fitting_section.fitting_type} Calculation",
-                "table4": table4 #type: ignore
+                "table4": table4,  # type: ignore
             })
 
         for child in anchor_blocks:
-            child_params = child.last_saved_params  # Get the saved parameters
+            child_params = child.last_saved_params
 
             fitting_type = build_metallic_flange(child_params)
             table4 = []
             for row in fitting_type.fitting_workflow_res:
                 table4.append({
-                    "label": row['label'],
-                    "formula": row['formula_html'],
-                    "reference": row['reference'],
+                    "label": row["label"],
+                    "formula": row["formula_html"],
+                    "reference": row["reference"],
                 })
 
             appendices.append({
                 "title": f"{child_params.pipe_section.pipe_material} Contraction Calculation",
-                "table4": table4 #type: ignore
+                "table4": table4,  # type: ignore
             })
-            
+
         return appendices
-    
+
     def get_thrust_block_params(self, params, **kwargs):
+        """Build the sequential dimension table used in the report summary.
+
+        Purpose
+        -------
+        This helper returns a list of rows containing both thrust-block and anchor-block
+        geometry information for the report. It is used to populate the dimension table in
+        the Word document and similar summaries.
+
+        Data flow
+        ---------
+        The method locates thrust-block and anchor-block children, reads each child's saved
+        parameter state, and extracts the relevant geometric values such as chainage,
+        fitting/material type, height, width, length, and depth.
+
+        Returns
+        -------
+        list[list[object]]
+            A table list whose rows contain a sequential numbering field and block geometry.
+
+        Notes
+        -----
+        ``num = 1`` is used as the row counter and is incremented across both child types so
+        the numbering remains sequential in the combined summary table. The method deliberately
+        preserves the current ordering: thrust blocks first, then anchor blocks.
         """
-        Helper method to generate child entity thrust block parameters.
-        Returns headers and rows that can be used in both TableView and Word export.
-        
-        Returns:
-            list[list[Any]]: table_data where data_rows is a list of row lists
-        """
-        
-        # Filter by entity type
+
         thrust_blocks = self.get_thrust_block_children(params, **kwargs)
         anchor_blocks = self.get_anchor_block_children(params, **kwargs)
 
         num = 1
-        
-        # Access parameters of each child
+
         data_rows = []
         for child in thrust_blocks:
-            child_params = child.last_saved_params  # Get the saved parameters
-            
-            # Access specific fields from the child's parametrization
+            # ``child.last_saved_params`` contains the saved child geometry and fitting info.
+            child_params = child.last_saved_params
+
             row = [
                 child_params.fitting_section.chainage,
                 child_params.fitting_section.fitting_type,
                 child_params.block_section.height,
-                child_params.block_section.width,       
+                child_params.block_section.width,
                 child_params.block_section.length,
                 child_params.block_section.depth,
-                num
-                # Add more fields as needed
+                num,
             ]
             data_rows.append(row)
             num += 1
@@ -271,28 +665,50 @@ class Project(vkt.Controller):
         for child in anchor_blocks:
             child_params = child.last_saved_params
 
-                        # Access specific fields from the child's parametrization
             row = [
                 child_params.pipe_section.chainage,
                 child_params.pipe_section.pipe_material,
                 child_params.block_section.height,
-                child_params.block_section.width,       
+                child_params.block_section.width,
                 child_params.block_section.length,
                 child_params.block_section.depth,
-                num
-                # Add more fields as needed
+                num,
             ]
             data_rows.append(row)
             num += 1
-        
+
         return data_rows
 
+    # ---------------------------------------------------------------------------
+    # VIKTOR views
+    # ---------------------------------------------------------------------------
     @vkt.TableView("Version History")
     def view_version_history(self, params, **kwargs):
+        """Render the project version history as a VIKTOR table.
+
+        Purpose
+        -------
+        This view shows the project revision history in the VIKTOR UI using a colour-coded
+        table. It is the user-visible summary of the ``version_history`` metadata.
+
+        Data flow
+        ---------
+        The method reads each version entry from ``params.version_history`` and converts it
+        into a table row. It also maps the status field to a background colour so Approved,
+        Reviewed, Checked, Reject, and Draft states are visually distinct.
+
+        Returns
+        -------
+        vkt.TableResult
+            A VIKTOR table containing the version rows and configured column headers.
+
+        Notes
+        -----
+        The ``@vkt.TableView("Version History")`` decorator exposes this method as a table
+        view in the VIKTOR interface. The returned ``TableResult`` is what the user sees in
+        the project UI.
         """
-        Display the check, review, approve version history in a table.
-        """
-        # Define table headers
+
         headers = [
             vkt.TableHeader("Issue", align="center"),
             vkt.TableHeader("Revision No.", align="left"),
@@ -302,20 +718,18 @@ class Project(vkt.Controller):
             vkt.TableHeader("Approved By", align="left"),
             vkt.TableHeader("Status", align="center"),
         ]
-        
-        # Build table rows from version history
+
         table_data = []
         for version in params.version_history:
-            # Apply color coding based on status
             status_cell = vkt.TableCell(
                 version.status,
                 background_color=vkt.Color(144, 238, 144) if version.status == "Approved" else
                                 vkt.Color(255, 255, 153) if version.status == "Reviewed" else
                                 vkt.Color(173, 216, 230) if version.status == "Checked" else
                                 vkt.Color(255, 182, 193) if version.status == "Rejected" else
-                                vkt.Color(211, 211, 211)  # Draft
+                                vkt.Color(211, 211, 211),
             )
-            
+
             row = [
                 version.issue,
                 version.revision_number,
@@ -326,60 +740,96 @@ class Project(vkt.Controller):
                 status_cell,
             ]
             table_data.append(row)
-        
+
         return vkt.TableResult(table_data, column_headers=headers)
 
     @vkt.TableView("Block Dimensions")
     def export_view(self, params, **kwargs):
-        # Get the current entity (the Root/parent entity)
-        entity_id = kwargs['entity_id']
-        
-        # Access child entities using the API
-        children = vkt.api_v1.API().get_entity_children(entity_id) 
-        
-        # Filter by entity type
-        thrust_blocks = [child for child in children if child.entity_type.name == 'ThrustBlock']
-        anchor_blocks = [child for child in children if child.entity_type.name == 'AnchorBlock'] 
-        
-        # Combine both block types for iteration
+        """Render summary dimensions for all child blocks as a VIKTOR table.
+
+        Purpose
+        -------
+        This view lists the geometry of all thrust-block and anchor-block child entities in a
+        compact summary table.
+
+        Data flow
+        ---------
+        The method retrieves the current project's child entities, filters them by entity type,
+        and reads each child's saved parameter state. It then records each child name, block
+        type, and dimensions into a DataFrame that VIKTOR can render as a table.
+
+        Returns
+        -------
+        vkt.TableResult
+            A ``TableResult`` based on a pandas DataFrame of block dimensions.
+
+        Notes
+        -----
+        The ``@vkt.TableView("Block Dimensions")`` decorator exposes this method in the VIKTOR
+        interface as a standard table view. The returned table is for display and export; it
+        is not the same as the Word report data model.
+        """
+
+        entity_id = kwargs["entity_id"]
+        children = vkt.api_v1.API().get_entity_children(entity_id)
+        thrust_blocks = [child for child in children if child.entity_type.name == "ThrustBlock"]
+        anchor_blocks = [child for child in children if child.entity_type.name == "AnchorBlock"]
         all_blocks = thrust_blocks + anchor_blocks
-        
+
         data_rows = []
         for child in all_blocks:
             child_params = child.last_saved_params
-            
-            # Determine block type dynamically
-            block_type = 'Thrust Block' if child.entity_type.name == 'ThrustBlock' else 'AnchorBlock'
-            
+            block_type = "Thrust Block" if child.entity_type.name == "ThrustBlock" else "AnchorBlock"
+
             row = {
-                'Name': child.name,
-                'Type': block_type,
-                'Height (m)': child_params.block_section.height,
-                'Length (m)': child_params.block_section.length,
-                'Width (m)': child_params.block_section.width,
+                "Name": child.name,
+                "Type": block_type,
+                "Height (m)": child_params.block_section.height,
+                "Length (m)": child_params.block_section.length,
+                "Width (m)": child_params.block_section.width,
             }
             data_rows.append(row)
-        
+
         df = pd.DataFrame(data_rows)
         return vkt.TableResult(df)
-    
+
     @vkt.TableView("Block Checks")
     def thrust_table(self, params, **kwargs):
-        # Get the current entity (the Root/parent entity)
-        entity_id = kwargs['entity_id']
-        
-        # Access child entities using the API
-        # This gets all children of the current entity
-        children = vkt.api_v1.API().get_entity_children(entity_id) 
-        
-        # Filter by entity type
-        thrust_blocks = [child for child in children if child.entity_type.name == 'ThrustBlock']
-        anchor_blocks = [child for child in children if child.entity_type.name == 'AnchorBlock'] 
-        
-        # Access parameters of each child
+        """Render the engineering check summary for thrust-block children as a table.
+
+        Purpose
+        -------
+        This method exposes the most important thrust-block safety-check results in the VIKTOR
+        UI without requiring the user to open the full engineering calculation data.
+
+        Data flow
+        ---------
+        The method reads the project child entities, filters to thrust blocks, then reads the
+        saved parameters for each child and reconstructs the relevant calculation object. The
+        method builds a row of pass/fail values based on the calculation's check results and
+        returns those rows as a table.
+
+        Returns
+        -------
+        vkt.TableResult
+            A table summarising the name, type, and safety check status for the thrust-block
+            entries in the project.
+
+        Notes
+        -----
+        The checks are intentionally represented as ``Pass``, ``Fail``, and ``N/A`` to match
+        the engineering logic already used elsewhere in the controller. This view is a UI
+        summary only; it is not the source of truth for the calculations.
+        """
+
+        entity_id = kwargs["entity_id"]
+        children = vkt.api_v1.API().get_entity_children(entity_id)
+        thrust_blocks = [child for child in children if child.entity_type.name == "ThrustBlock"]
+        anchor_blocks = [child for child in children if child.entity_type.name == "AnchorBlock"]
+
         data_rows = []
         for child in thrust_blocks:
-            child_params = child.last_saved_params  # Get the saved parameters
+            child_params = child.last_saved_params
 
             fitting_type = fitting_from_params(params=child_params)
             if isinstance(fitting_type, VerticalDownturnBendThrustBlock):
@@ -393,35 +843,74 @@ class Project(vkt.Controller):
                 vertical_thrust = "N/A"
 
             if isinstance(fitting_type, VerticalUpturnBendThrustBlock):
-                overturning_moment_check = "N/A" 
+                overturning_moment_check = "N/A"
             else:
                 overturning_moment_check = "Pass" if fitting_type.overturning_check else "Fail"
-            # Access specific fields from the child's parametrization
+
             row = {
                 "Name": child.name,
                 "Fitting Type": child_params.fitting_section.fitting_type,
-                "Thrust Pass Through Check": "Pass" if fitting_type.thrust_pass_through_check else "Fail", 
+                "Thrust Pass Through Check": "Pass" if fitting_type.thrust_pass_through_check else "Fail",
                 "Overturning Moment Check": overturning_moment_check,
                 "Vertical Thrust": vertical_thrust,
                 "Uplift Check": uplift_test,
-                # Add more fields as needed
             }
             data_rows.append(row)
-        
-        # Convert to DataFrame for export
+
         df = pd.DataFrame(data_rows)
         return vkt.TableResult(df)
-    
+
+    # ---------------------------------------------------------------------------
+    # Report generation and downloads
+    # ---------------------------------------------------------------------------
     def generate_word_document(self, params, **kwargs):
-        # Create emtpy components list to be filled later
+        """Build the Word report for the project using the Arcadis template.
+
+        Purpose
+        -------
+        This method assembles the project metadata, version history, safety checks, block
+        dimensions, and calculation appendices into a ``WordFileTag`` collection, which is
+        then rendered into the configured report template.
+
+        Data flow
+        ---------
+        The method begins with project-level metadata such as title, date, producer, and
+        client. It then collects the version-history rows, block safety summary rows, and the
+        block geometry summary rows. Finally it resolves each calculation appendix from the
+        child calculation objects and passes the whole collection to ``render_word_file``.
+
+        The template mechanism uses ``WordFileTag`` objects to map placeholder names in the
+        document to the data values. The tags are expected to correspond to fields such as:
+
+        - ``report_title``;
+        - ``report_date``;
+        - ``producer_name``;
+        - ``client_name``;
+        - ``client_job``;
+        - ``table1``;
+        - ``table2``;
+        - ``table3``;
+        - ``appendices``.
+
+        Returns
+        -------
+        Word document object
+            The rendered VIKTOR Word file built from the Arcadis template.
+
+        Notes
+        -----
+        The method intentionally keeps the tag names and the template file path exactly as
+        defined in the current implementation. The report generation is a composition step: a
+        data model is assembled and then rendered into the document template.
+        """
+
         components = []
 
-        # Fill components list with data
         components.append(vkt.word.WordFileTag("report_title", params.project_title))
         components.append(vkt.word.WordFileTag("report_date", str(params.report_date)))
         components.append(vkt.word.WordFileTag("producer_name", params.producer_name))
-        components.append(vkt.word.WordFileTag("client_name", params.client_name)) 
-        components.append(vkt.word.WordFileTag("client_job", params.client_representative)) 
+        components.append(vkt.word.WordFileTag("client_name", params.client_name))
+        components.append(vkt.word.WordFileTag("client_job", params.client_representative))
 
         version_table_data = self.get_version_history_table_data(params, **kwargs)
 
@@ -439,8 +928,6 @@ class Project(vkt.Controller):
 
         components.append(vkt.word.WordFileTag("table1", version_table_rows))
 
-
-        # thrust block safety check params
         thrust_safety_checks = self.block_safety_table(params, **kwargs)
 
         thrust_safety_checks_rows = []
@@ -455,7 +942,6 @@ class Project(vkt.Controller):
             })
         components.append(vkt.word.WordFileTag("table2", thrust_safety_checks_rows))
 
-        # thrust block dimension entry
         fitting_table_data = self.get_thrust_block_params(params, **kwargs)
 
         fitting_table_rows = []
@@ -472,35 +958,95 @@ class Project(vkt.Controller):
         components.append(vkt.word.WordFileTag("table3", fitting_table_rows))
 
         appendices = self.get_block_workflows(params, **kwargs)
-        
         components.append(vkt.word.WordFileTag("appendices", appendices))
 
-        # Get path to template and render word file
         template_path = Path(__file__).parent / "files" / "arcadis_template.docx"
-        with open(template_path, 'rb') as template:
+        with open(template_path, "rb") as template:
             word_file = vkt.word.render_word_file(template, components)
 
         return word_file
-    
+
     def download_pdf_document(self, params, **kwargs):
+        """Generate the Word report and convert it to a downloadable PDF file.
+
+        Purpose
+        -------
+        This method wraps the normal report-generation flow and uses VIKTOR's Word-to-PDF
+        conversion to make a PDF copy of the report available to the user.
+
+        Data flow
+        ---------
+        The method first generates the Word report through ``generate_word_document`` and
+        then reads that file as binary. It passes the binary stream to
+        ``vkt.convert_word_to_pdf`` and returns the resulting PDF as a ``DownloadResult``.
+
+        Returns
+        -------
+        vkt.DownloadResult
+            A downloadable PDF report with the project title in the filename.
+
+        Notes
+        -----
+        The process is intentionally: Word report -> PDF conversion -> download. The method
+        does not change the output naming or file structure from the current implementation.
+        """
+
         word_file = self.generate_word_document(params, **kwargs)
 
         with word_file.open_binary() as f1:
             pdf_file = vkt.convert_word_to_pdf(f1)
 
-        return vkt.DownloadResult(pdf_file, f'{params.project_title} thrust_restraint_calculation.pdf')
-    
+        return vkt.DownloadResult(pdf_file, f"{params.project_title} thrust_restraint_calculation.pdf")
+
     def download_word_document(self, params, **kwargs):
+        """Generate and return the Word report as a VIKTOR download.
+
+        Purpose
+        -------
+        This method creates the project Word document and exposes it as a downloadable asset
+        without converting it to PDF first.
+
+        Data flow
+        ---------
+        The method delegates to ``generate_word_document`` and then wraps the resulting Word
+        file in a ``vkt.DownloadResult`` for download from the VIKTOR UI.
+
+        Returns
+        -------
+        vkt.DownloadResult
+            A downloadable Word document generated from the Arcadis template.
+        """
+
         word_file = self.generate_word_document(params, **kwargs)
 
+        return vkt.DownloadResult(word_file, f"{params.project_title} thrust_restraint_calculation.docx")
 
-        return vkt.DownloadResult(word_file, f'{params.project_title} thrust_restraint_calculation.docx')
-    
     @vkt.PDFView("PDF viewer", duration_guess=5)
     def pdf_view(self, params, **kwargs):
+        """Render the generated report as a PDF preview in the VIKTOR UI.
+
+        Purpose
+        -------
+        This method is exposed as a PDF view so users can preview the report inside VIKTOR.
+
+        Data flow
+        ---------
+        The method generates the Word report and then converts it to PDF in memory before
+        returning a ``vkt.PDFResult``.
+
+        Returns
+        -------
+        vkt.PDFResult
+            A PDF preview object for the generated report.
+
+        Notes
+        -----
+        The distinction in this application is that ``DownloadResult`` is used for file
+        downloads, while ``PDFResult`` is used for in-UI preview rendering.
+        """
+
         word_file = self.generate_word_document(params, **kwargs)
 
         with word_file.open_binary() as f1:
             pdf_file = vkt.convert_word_to_pdf(f1)
-
             return vkt.PDFResult(file=pdf_file)

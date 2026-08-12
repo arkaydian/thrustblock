@@ -116,10 +116,18 @@ class ProjectsRoot(vkt.Controller):
     label = "Projects"
     children = ["Project"]
     show_children_as = "Cards"
-    parametrization = ProjectsRootParametrization
-
+    parametrization = ProjectsRootParametrization # type: ignore
 
 class ProjectParametrization(vkt.Parametrization):
+    thrust_restraint = vkt.ChildEntityManager("ThrustRestraint")
+
+class Project(vkt.Controller):
+    label = "Project"
+    children = ["ThrustRestraint"]
+    show_children_as = "Cards"
+    parametrization = ProjectParametrization # type: ignore
+
+class ThrustRestraintParametrization(vkt.Parametrization):
     """Project/report-level metadata stored on the ``Project`` entity.
 
     Purpose
@@ -196,7 +204,7 @@ class ProjectParametrization(vkt.Parametrization):
 # ├── aggregates results
 # │
 # └── produces views and reports
-class Project(vkt.Controller):
+class ThrustRestraint(vkt.Controller):
     """Main orchestration layer for a thrust-restraint project.
 
     Purpose
@@ -256,10 +264,10 @@ class Project(vkt.Controller):
     ``app.civeng1``; this file mainly turns VIKTOR entity data into reportable results.
     """
 
-    label = "Project"
+    label = "Thrust Restraint"
     children = ["ThrustBlock", "AnchorBlock"]
     show_children_as = "Table"
-    parametrization = ProjectParametrization  # type: ignore
+    parametrization = ThrustRestraintParametrization  # type: ignore
 
     # ---------------------------------------------------------------------------
     # Helper data preparation

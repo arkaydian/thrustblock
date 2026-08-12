@@ -6,8 +6,7 @@ from .thrust_restraint.thrust_block.controller import (
 from .thrust_restraint.anchor_block.controller import (
     AnchorBlockController as AnchorBlock,
 )
-from .thrust_root.controller import ProjectsRoot
-from .thrust_root.controller import Project
+from .thrust_root.controller import ProjectsRoot, Project, ThrustRestraint
 
 
 initial_entities = [

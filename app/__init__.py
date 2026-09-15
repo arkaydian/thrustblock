@@ -6,13 +6,30 @@ from .thrust_restraint.thrust_block.controller import (
 from .thrust_restraint.anchor_block.controller import (
     AnchorBlockController as AnchorBlock,
 )
-from .thrust_root.controller import ProjectsRoot, Project, ThrustRestraint
+from .release_notes.controller import (
+    ReleaseNotesController as ReleaseNotes
+)
+from .documentation.controller import (
+    DocumentationController as Documentation
+)
+from .root.controller import ProjectsRoot, ThrustRestraint, QuickCalc, Project
 
 
 initial_entities = [
     InitialEntity(
         "ProjectsRoot",
-        name="Projects",
-        use_as_start_page=True,
-    )
+        name="📁 Projects",
+    ),
+    InitialEntity(
+        "QuickCalc",
+        name="⚡ Quick Calc",
+    ),    
+    InitialEntity(
+        "ReleaseNotes",
+        name="📢 Release Notes",
+    ),
+    InitialEntity(
+        "Documentation",
+        name="📚 Documentation",
+    ),
 ]
